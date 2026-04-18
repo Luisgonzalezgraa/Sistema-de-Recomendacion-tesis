@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Recomendación - Riego</title>
+    <link rel="stylesheet" href="/frontend/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-content">
+                <h1>🌾 Sistema de Recomendación</h1>
+                <p class="subtitle">Diseño de Redes de Riego Multiparámetros</p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Health Check Card -->
+            <div class="card health-card">
+                <div class="card-header">
+                    <h2>Estado de la API</h2>
+                    <span class="status-badge loading" id="statusBadge">Verificando...</span>
+                </div>
+
+                <div class="card-body">
+                    <!-- Status Circle -->
+                    <div class="status-container">
+                        <div class="status-circle" id="statusCircle">
+                            <span class="spinner"></span>
+                        </div>
+                        <p class="status-text" id="statusText">Conectando con el servidor...</p>
+                    </div>
+
+                    <!-- API Info -->
+                    <div class="api-info" id="apiInfo" style="display: none;">
+                        <div class="info-item">
+                            <span class="info-label">Estado:</span>
+                            <span class="info-value success" id="infoStatus">Activo</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Versión API:</span>
+                            <span class="info-value" id="infoVersion">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">URL:</span>
+                            <span class="info-value url" id="infoUrl">http://localhost:5000</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Último Check:</span>
+                            <span class="info-value" id="infoTime">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Error Message -->
+                    <div class="error-message" id="errorMessage" style="display: none;">
+                        <p id="errorText"></p>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="card-footer">
+                    <button class="btn btn-primary" onclick="checkHealth()">
+                        <span class="btn-icon">🔄</span> Verificar Estado
+                    </button>
+                    <button class="btn btn-secondary" onclick="openApiDocs()">
+                        <span class="btn-icon">📚</span> Ver Documentación
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <h3>Análisis</h3>
+                    <p>Geoespacial e Hidráulico</p>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">💡</div>
+                    <h3>Recomendaciones</h3>
+                    <p>Basadas en parámetros reales</p>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔧</div>
+                    <h3>Inteligente</h3>
+                    <p>Motor de decisión automático</p>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⚡</div>
+                    <h3>Rápido</h3>
+                    <p>Resultados en segundos</p>
+                </div>
+            </div>
+
+            <!-- Endpoints Preview -->
+            <div class="card endpoints-card">
+                <div class="card-header">
+                    <h2>Endpoints Disponibles</h2>
+                </div>
+                <div class="card-body">
+                    <div class="endpoint-item">
+                        <span class="endpoint-method get">GET</span>
+                        <span class="endpoint-path">/api/v1/health</span>
+                        <span class="endpoint-desc">Verificar estado</span>
+                    </div>
+                    <div class="endpoint-item">
+                        <span class="endpoint-method get">GET</span>
+                        <span class="endpoint-path">/api/v1/docs</span>
+                        <span class="endpoint-desc">Documentación</span>
+                    </div>
+                    <div class="endpoint-item">
+                        <span class="endpoint-method post">POST</span>
+                        <span class="endpoint-path">/api/v1/analysis/elevation</span>
+                        <span class="endpoint-desc">Análisis topográfico</span>
+                    </div>
+                    <div class="endpoint-item">
+                        <span class="endpoint-method post">POST</span>
+                        <span class="endpoint-path">/api/v1/analysis/hydraulic</span>
+                        <span class="endpoint-desc">Análisis hidráulico</span>
+                    </div>
+                    <div class="endpoint-item">
+                        <span class="endpoint-method post">POST</span>
+                        <span class="endpoint-path">/api/v1/recommendations</span>
+                        <span class="endpoint-desc">Recomendaciones completas</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Info -->
+            <div class="info-footer">
+                <p>
+                    <strong>Universidad de Santiago de Chile</strong> | 
+                    Departamento de Ingeniería Informática | 
+                    Seminario 2026
+                </p>
+                <p>
+                    Alumno: Luis González | 
+                    Profesor Guía: Arturo Álvarez
+                </p>
+            </div>
+        </main>
+    </div>
+
+    <script src="/frontend/script.js"></script>
+    <script>
+        // Hacer el primer check al cargar la página
+        window.addEventListener('load', function() {
+            setTimeout(checkHealth, 500);
+        });
+
+        // Auto refresh cada 30 segundos
+        setInterval(checkHealth, 30000);
+    </script>
+</body>
+</html>

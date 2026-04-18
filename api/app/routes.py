@@ -2,9 +2,10 @@
 API Routes and Endpoints
 Defines all REST endpoints for the irrigation recommendation system
 """
-from flask import request, jsonify
+from flask import request, jsonify, send_file, send_from_directory
 from flask_restful import Resource, reqparse
 import logging
+import os
 from app.models.data_models import GeoPoint, WaterComposition, APIResponse
 from app.modules.geospatial_analyzer import GeospatialAnalyzer
 from app.modules.hydraulic_calculator import HydraulicCalculator
@@ -336,6 +337,16 @@ def register_routes(app, api):
         app: Flask application instance
         api: Flask-RESTful Api instance
     """
+    # Get frontend path - correctly reference the frontend folder
+    # __file__ is at api/app/routes.py, so:
+    # dirname(__file__) = api/app
+    # dirname(dirname(__file__)) = api (project root where frontend folder is)
+    api_root = os.path.dirname(os.path.dirname(__file__))
+    frontend_path = os.path.join(api_root, 'frontend')
+    
+    logger.info(f"Frontend path configured at: {frontend_path}")
+    logger.info(f"Frontend files exist: {os.path.exists(frontend_path)}")
+    
     # Health check
     api.add_resource(HealthCheck, '/api/v1/health')
     
@@ -377,3 +388,63 @@ def register_routes(app, api):
                 }
             }
         }, 200
+    
+    # Frontend routes
+    @app.route('/')
+    @app.route('/dashboard')
+    def dashboard():
+        """Serve the main dashboard"""
+        index_path = os.path.join(frontend_path, 'index.html')
+        logger.debug(f"Looking for dashboard at: {index_path}")
+        logger.debug(f"File exists: {os.path.exists(index_path)}")
+        
+        try:
+            if os.path.exists(index_path):
+                with open(index_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+            else:
+                logger.error(f"Dashboard file not found at: {index_path}")
+                return {
+                    'error': 'Panel de control no encontrado',
+                    'message': 'Los archivos de la interfaz no están disponibles. Compruebe la instalación.',
+                    'debug_info': {
+                        'looking_for': index_path,
+                        'frontend_path': frontend_path,
+                        'frontend_exists': os.path.exists(frontend_path)
+                    }
+                }, 404
+        except Exception as e:
+            logger.error(f"Error serving dashboard: {str(e)}")
+            return {
+                'error': 'Error al cargar el panel',
+                'message': str(e)
+            }, 500
+    
+    @app.route('/frontend/<path:filename>')
+    def serve_frontend(filename):
+        """Serve frontend static files (CSS, JS)"""
+        file_path = os.path.join(frontend_path, filename)
+        logger.debug(f"Serving frontend file: {filename} from {file_path}")
+        
+        try:
+            if not os.path.exists(file_path):
+                logger.warning(f"File not found: {file_path}")
+                return {'error': 'Archivo no encontrado'}, 404
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Determine content type
+            if filename.endswith('.css'):
+                content_type = 'text/css; charset=utf-8'
+            elif filename.endswith('.js'):
+                content_type = 'application/javascript; charset=utf-8'
+            else:
+                content_type = 'text/plain; charset=utf-8'
+            
+            return content, 200, {'Content-Type': content_type}
+            
+        except Exception as e:
+            logger.error(f"Error serving frontend file {filename}: {str(e)}")
+            return {'error': 'Error al cargar el archivo'}, 500
