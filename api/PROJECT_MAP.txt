@@ -1,0 +1,274 @@
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                 SISTEMA DE RECOMENDACIÓN DE RIEGO - API v1.0                 ║
+║                Universidad de Santiago de Chile - Tesis 2026                 ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+📦 ESTRUCTURA DEL PROYECTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+api/
+│
+├── 📄 DOCUMENTACIÓN
+│   ├── API_README.md           ← Documentación completa (LEER PRIMERO)
+│   ├── QUICKSTART.md           ← Guía rápida de 5 minutos
+│   ├── PROJECT_STRUCTURE.md    ← Detalles arquitectónicos
+│   ├── CHANGELOG.md            ← Historial de versiones
+│   └── PROJECT_MAP.txt         ← Este archivo
+│
+├── 🔧 CONFIGURACIÓN
+│   ├── config.py               ← Configuración centralizada por entorno
+│   ├── .env.example            ← Variables de entorno (copiar a .env)
+│   ├── requirements.txt        ← Dependencias Python
+│   └── .gitignore              ← Archivos excluidos de git
+│
+├── ▶️  EJECUCIÓN
+│   └── run.py                  ← Punto de entrada principal
+│
+├── 📂 app/                      ← Código de la aplicación
+│   ├── __init__.py             ← Factory de Flask
+│   ├── routes.py               ← Definición de endpoints REST
+│   │
+│   ├── 📂 models/              ← Modelos de datos
+│   │   ├── __init__.py
+│   │   └── data_models.py      ← 8 dataclasses principales
+│   │
+│   ├── 📂 modules/             ← Lógica de negocio
+│   │   ├── __init__.py
+│   │   ├── geospatial_analyzer.py      ← Análisis geoespacial
+│   │   ├── hydraulic_calculator.py     ← Cálculos hidráulicos  
+│   │   └── recommendation_engine.py    ← Motor de recomendaciones
+│   │
+│   ├── 📂 services/            ← Servicios externos
+│   │   ├── __init__.py
+│   │   └── elevation_service.py        ← Google Elevation API + Mock
+│   │
+│   └── 📂 utils/               ← Utilidades (expansible)
+│       └── __init__.py
+│
+├── 📂 data/                    ← Datos y almacenamiento
+│   └── samples/
+│       ├── recommendation_request_sample.json
+│       └── elevation_request_sample.json
+│
+├── 📂 tests/                   ← Suite de tests (estructura lista)
+│   └── (próximamente)
+│
+└── 🗂️  MISC
+    └── (configuración git, etc)
+
+
+🏗️  COMPONENTES PRINCIPALES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1️⃣  GEOSPATIAL ANALYZER
+   ├─ process_aerial_image()      → Procesa imágenes aéreas
+   ├─ generate_dem_from_elevation_data()  → Crea modelo digital
+   ├─ calculate_slope()            → Pendiente entre puntos
+   ├─ calculate_slope_from_dem()   → Pendiente desde DEM
+   └─ extract_slope_map()          → Mapa completo de pendientes
+
+2️⃣  HYDRAULIC CALCULATOR
+   ├─ calculate_hazen_williams_loss()     → Pérdidas por fricción
+   ├─ calculate_elevation_pressure_change() → Presión por altura
+   ├─ calculate_emitter_flow()     → Caudal del gotero
+   ├─ calculate_required_pump_power() → Potencia de bomba
+   └─ perform_hydraulic_analysis() → Análisis completo
+
+3️⃣  RECOMMENDATION ENGINE
+   ├─ recommend_tubing_materials() → Selecciona materiales
+   ├─ recommend_pump_power()       → Recomienda potencia
+   ├─ generate_design_notes()      → Crea notas de diseño
+   └─ generate_recommendations()   → Resultado final
+
+4️⃣  ELEVATION SERVICE
+   ├─ GoogleElevationService       → Integración Google API
+   ├─ MockElevationService         → Datos de prueba
+   └─ create_elevation_service()   → Factory pattern
+
+
+🔌 ENDPOINTS REST (5 Total)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET  /api/v1/health
+     └─ Verifica que la API está corriendo
+
+GET  /api/v1/docs
+     └─ Documentación de la API
+
+POST /api/v1/analysis/elevation
+     ├─ Entrada: Lista de puntos geográficos
+     └─ Salida: Análisis topográfico (pendiente, elevación, distancia)
+
+POST /api/v1/analysis/hydraulic
+     ├─ Entrada: Análisis topo + composición agua + parámetros tuberías
+     └─ Salida: Presiones, caudales, potencia requerida, advertencias
+
+POST /api/v1/recommendations
+     ├─ Entrada: Ubicación + agua + tuberías
+     ├─ Procesa: Todos los análisis automáticamente
+     └─ Salida: Recomendaciones finales + materiales + potencia
+
+
+📊 MODELOS DE DATOS (8 Dataclasses)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+├─ GeoPoint
+│  ├─ latitude: float
+│  ├─ longitude: float
+│  └─ elevation: Optional[float]
+│
+├─ TopographicAnalysis
+│  ├─ point_start: GeoPoint
+│  ├─ point_end: GeoPoint
+│  ├─ elevation_difference: float
+│  ├─ slope_percentage: float
+│  ├─ slope_radians: float
+│  ├─ slope_degrees: float
+│  └─ distance: float
+│
+├─ WaterComposition
+│  ├─ density: float (kg/m³)
+│  ├─ temperature: float (°C)
+│  ├─ ph: float
+│  ├─ salinity: float (mg/L)
+│  ├─ hardness: float (mg/L)
+│  ├─ fertilizer_content: Optional[str]
+│  └─ pesticide_content: Optional[str]
+│
+├─ HydraulicAnalysis
+│  ├─ flow_rate: float
+│  ├─ initial_pressure: float
+│  ├─ final_pressure: float
+│  ├─ pressure_loss: float
+│  ├─ hazen_williams_loss: float
+│  ├─ elevation_pressure_change: float
+│  ├─ emitter_flow: float
+│  ├─ required_pump_power: float
+│  └─ design_warnings: List[str]
+│
+├─ TubingMaterial
+│  ├─ name: str
+│  ├─ material_type: str (HDPE, PVC, PE)
+│  ├─ internal_diameter: float
+│  ├─ external_diameter: float
+│  ├─ wall_thickness: float
+│  ├─ hazen_williams_c: float
+│  ├─ recommended_pressure: float
+│  └─ compatibility_notes: List[str]
+│
+├─ RecommendationResult
+│  ├─ project_id: str
+│  ├─ timestamp: str
+│  ├─ topographic_analysis: TopographicAnalysis
+│  ├─ water_composition: WaterComposition
+│  ├─ hydraulic_analysis: HydraulicAnalysis
+│  ├─ recommended_tubings: List[TubingMaterial]
+│  ├─ recommended_pump_power: float
+│  ├─ design_notes: List[str]
+│  └─ confidence_score: float (0-1)
+│
+├─ DigitalElevationModel
+│  ├─ id: str
+│  ├─ created_at: str
+│  ├─ source: str
+│  ├─ bounding_box: Dict
+│  ├─ resolution: float
+│  └─ elevation_points: Optional[List]
+│
+└─ APIResponse (wrapper estándar)
+   ├─ success: bool
+   ├─ message: str
+   ├─ data: Optional[Dict]
+   ├─ errors: Optional[List]
+   └─ timestamp: str
+
+
+⚙️  ECUACIONES IMPLEMENTADAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. HAZEN-WILLIAMS (Pérdidas por fricción)
+   hf = 10.67 * L * (Q^1.852) / (C^1.852 * D^4.87)
+   
+   hf    = pérdida de carga (m)
+   L     = longitud tuberías (m)
+   Q     = caudal (m³/s)
+   C     = coeficiente rugosidad (HDPE=150)
+   D     = diámetro interno (m)
+
+2. PRESIÓN POR ELEVACIÓN (Hidrostática)
+   ΔP = ρ * g * Δh
+   
+   ΔP    = cambio de presión (Pa)
+   ρ     = densidad agua (1000 kg/m³)
+   g     = gravedad (9.81 m/s²)
+   Δh    = diferencia elevación (m)
+   
+   Conversión: 1m agua ≈ 0.098 bar
+
+3. COMPORTAMIENTO EMISORES (Goteros)
+   q = k * P^x
+   
+   q     = caudal emisor (L/h)
+   P     = presión operación (bar)
+   k     = coeficiente emisor
+   x     = exponente descarga (0.5-0.6 sin compensar)
+
+4. POTENCIA BOMBA
+   Power (HP) = (Flow [L/min] * Pressure [bar]) / 600
+
+
+🏭 MATERIALES DE REFERENCIA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+HDPE 16mm
+├─ Diámetro interno: 16mm
+├─ Coeficiente C: 150
+├─ Presión recomendada: 2.5 bar
+└─ Notas: Excelente resistencia química, UV, fertilizantes
+
+HDPE 12mm
+├─ Diámetro interno: 12mm
+├─ Coeficiente C: 150
+├─ Presión recomendada: 2.0 bar
+└─ Notas: Capacidad más baja, ideal campos pequeños
+
+PVC 20mm
+├─ Diámetro interno: 20mm
+├─ Coeficiente C: 140
+├─ Presión recomendada: 8.0 bar
+└─ Notas: Mayor rigidez, requiere protección solar
+
+PE 16mm
+├─ Diámetro interno: 16mm
+├─ Coeficiente C: 145
+├─ Presión recomendada: 1.5 bar
+└─ Notas: Menor costo, presión más baja
+
+
+⚡ RÁPIDO START
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. cd api
+
+2. python -m venv venv
+   venv\Scripts\activate
+
+3. pip install -r requirements.txt
+
+4. python run.py
+
+5. curl http://localhost:5000/api/v1/health
+
+
+📚 REFERENCIAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Hazen & Williams (1905) - Hydraulic tables
+✓ Solomon (1985) - Global uniformity trickle irrigation
+✓ Chen et al. (2022) - Discharge exponent estimation
+✓ FAO (2007) - Pressurized irrigation techniques
+
+
+🎯 PRÓXIMO: Leer API_README.md para documentación completa
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

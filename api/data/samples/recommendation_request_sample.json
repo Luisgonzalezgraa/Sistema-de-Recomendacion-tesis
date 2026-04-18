@@ -1,0 +1,24 @@
+{
+  "location": {
+    "latitude": -33.5731,
+    "longitude": -70.6673
+  },
+  "endpoint": {
+    "latitude": -33.5745,
+    "longitude": -70.6690
+  },
+  "water_composition": {
+    "density": 1000,
+    "temperature": 20,
+    "ph": 7.0,
+    "salinity": 200,
+    "hardness": 150,
+    "fertilizer_content": null,
+    "pesticide_content": null
+  },
+  "pipe_length": 450,
+  "pipe_diameter": 0.016,
+  "flow_rate": 0.00012,
+  "emitter_coefficient": 0.95,
+  "emitter_exponent": 0.55
+}
