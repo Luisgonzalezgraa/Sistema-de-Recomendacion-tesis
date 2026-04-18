@@ -7,15 +7,52 @@
     <link rel="stylesheet" href="/frontend/style.css">
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <div class="header-content">
-                <h1>🌾 Sistema de Recomendación</h1>
-                <p class="subtitle">Diseño de Redes de Riego Multiparámetros</p>
-            </div>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-content">
+        <div class="icon-header">
+            <h1>🌾</h1>
         </div>
+            <h1>Sistema de Recomendación</h1>
+        </div>
+    </div>
+    <!-- Sidebar Menu -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h3>Menú</h3>
+            <button class="sidebar-toggle" id="sidebarToggle">☰</button>
+        </div>
+        <nav class="sidebar-menu">
+            <ul>
+                <li class="menu-item">
+                    <a href="#" onclick="checkHealth()" class="menu-link">
+                        <span class="menu-icon">🔍</span>
+                        <span class="menu-text">Estado API</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" onclick="openApiDocs()" class="menu-link">
+                        <span class="menu-icon">📚</span>
+                        <span class="menu-text">Documentación</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" class="menu-link">
+                        <span class="menu-icon">⚙️</span>
+                        <span class="menu-text">Endpoints</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" class="menu-link">
+                        <span class="menu-icon">ℹ️</span>
+                        <span class="menu-text">Acerca de</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
 
+    <div class="container"> 
         <!-- Main Content -->
         <main class="main-content">
             <!-- Health Check Card -->
