@@ -10,42 +10,68 @@
     <!-- Header -->
     <div class="header">
         <div class="header-content">
-        <div class="icon-header">
-            <h1>🌾</h1>
-        </div>
+            <div class="icon-header">
+                <h1>🌾</h1>
+            </div>
             <h1>Sistema de Recomendación</h1>
         </div>
     </div>
     <!-- Sidebar Menu -->
     <div class="sidebar">
-        <div class="sidebar-header">
-            <h3>Menú</h3>
-            <button class="sidebar-toggle" id="sidebarToggle">☰</button>
-        </div>
         <nav class="sidebar-menu">
             <ul>
                 <li class="menu-item">
-                    <a href="#" onclick="checkHealth()" class="menu-link">
-                        <span class="menu-icon">🔍</span>
-                        <span class="menu-text">Estado API</span>
+                    <a href="#" class="menu-link active" onclick="switchTab('inicio'); return false;">
+                        <span class="menu-icon">🏠</span>
+                        <span class="menu-text">Inicio</span>
                     </a>
                 </li>
                 <li class="menu-item">
-                    <a href="#" onclick="openApiDocs()" class="menu-link">
-                        <span class="menu-icon">📚</span>
-                        <span class="menu-text">Documentación</span>
+                    <a href="#" class="menu-link" onclick="switchTab('terreno'); return false;">
+                        <span class="menu-icon">🗺️</span>
+                        <span class="menu-text">Terreno</span>
                     </a>
                 </li>
                 <li class="menu-item">
-                    <a href="#" class="menu-link">
+                    <a href="#" class="menu-link" onclick="switchTab('hidraulica'); return false;">
+                        <span class="menu-icon">💧</span>
+                        <span class="menu-text">Hidráulica</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" class="menu-link" onclick="switchTab('agua'); return false;">
+                        <span class="menu-icon">⚗️</span>
+                        <span class="menu-text">Agua y materiales</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" class="menu-link" onclick="switchTab('diseno'); return false;">
                         <span class="menu-icon">⚙️</span>
-                        <span class="menu-text">Endpoints</span>
+                        <span class="menu-text">Diseño</span>
                     </a>
                 </li>
                 <li class="menu-item">
-                    <a href="#" class="menu-link">
+                    <a href="#" class="menu-link" onclick="switchTab('resultados'); return false;">
+                        <span class="menu-icon">📋</span>
+                        <span class="menu-text">Reporte</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" class="menu-link" onclick="switchTab('historial'); return false;">
+                        <span class="menu-icon">📜</span>
+                        <span class="menu-text">Historial</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" class="menu-link" onclick="switchTab('api'); return false;">
+                        <span class="menu-icon">🔧</span>
+                        <span class="menu-text">API / Sistema</span>
+                    </a>
+                </li>
+                <li class="menu-item">
+                    <a href="#" class="menu-link" onclick="switchTab('acerca'); return false;">
                         <span class="menu-icon">ℹ️</span>
-                        <span class="menu-text">Acerca de</span>
+                        <span class="menu-text">Acerca</span>
                     </a>
                 </li>
             </ul>
@@ -55,113 +81,385 @@
     <div class="container"> 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Health Check Card -->
-            <div class="card health-card">
-                <div class="card-header">
-                    <h2>Estado de la API</h2>
-                    <span class="status-badge loading" id="statusBadge">Verificando...</span>
-                </div>
-
-                <div class="card-body">
-                    <!-- Status Circle -->
-                    <div class="status-container">
-                        <div class="status-circle" id="statusCircle">
-                            <span class="spinner"></span>
-                        </div>
-                        <p class="status-text" id="statusText">Conectando con el servidor...</p>
-                    </div>
-
-                    <!-- API Info -->
-                    <div class="api-info" id="apiInfo" style="display: none;">
-                        <div class="info-item">
-                            <span class="info-label">Estado:</span>
-                            <span class="info-value success" id="infoStatus">Activo</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Versión API:</span>
-                            <span class="info-value" id="infoVersion">-</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">URL:</span>
-                            <span class="info-value url" id="infoUrl">http://localhost:5000</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Último Check:</span>
-                            <span class="info-value" id="infoTime">-</span>
-                        </div>
-                    </div>
-
-                    <!-- Error Message -->
-                    <div class="error-message" id="errorMessage" style="display: none;">
-                        <p id="errorText"></p>
-                    </div>
-                </div>
-
-                <!-- Actions -->
-                <div class="card-footer">
-                    <button class="btn btn-primary" onclick="checkHealth()">
-                        <span class="btn-icon">🔄</span> Verificar Estado
+            <!-- Tabs Navigation -->
+            <div class="tabs-container">
+                <div class="tabs-nav">
+                    <button class="tab-btn active" onclick="switchTab('inicio')">
+                        <span class="tab-icon">🏠</span>
+                        <span class="tab-label">Inicio</span>
                     </button>
-                    <button class="btn btn-secondary" onclick="openApiDocs()">
-                        <span class="btn-icon">📚</span> Ver Documentación
+                    <button class="tab-btn" onclick="openUploadModal()">
+                        <span class="tab-icon">📤</span>
+                        <span class="tab-label">Nuevo Análisis</span>
                     </button>
                 </div>
             </div>
 
-            <!-- Quick Stats -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon">📊</div>
-                    <h3>Análisis</h3>
-                    <p>Geoespacial e Hidráulico</p>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">💡</div>
-                    <h3>Recomendaciones</h3>
-                    <p>Basadas en parámetros reales</p>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">🔧</div>
-                    <h3>Inteligente</h3>
-                    <p>Motor de decisión automático</p>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">⚡</div>
-                    <h3>Rápido</h3>
-                    <p>Resultados en segundos</p>
+            <!-- Tab Content -->
+            <!-- Inicio Tab -->
+            <div id="inicio-tab" class="tab-content active">
+                <div class="inicio-container">
+                    <div class="welcome-header">
+                        <h2>🌾 Sistema de Recomendación para Riego</h2>
+                        <p>Análisis completo de terreno, hidráulica y diseño de red de riego por goteo</p>
+                    </div>
+
+                    <!-- Stats Cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">📸</div>
+                            <div class="stat-content">
+                                <div class="stat-label">Última imagen analizada</div>
+                                <div class="stat-value">-</div>
+                                <div class="stat-date">Sin análisis</div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon">⚠️</div>
+                            <div class="stat-content">
+                                <div class="stat-label">Pendiente detectada</div>
+                                <div class="stat-value">-</div>
+                                <div class="stat-date">Pendiente de datos</div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon">💡</div>
+                            <div class="stat-content">
+                                <div class="stat-label">Recomendación principal</div>
+                                <div class="stat-value">-</div>
+                                <div class="stat-date">Por generar</div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-icon">✅</div>
+                            <div class="stat-content">
+                                <div class="stat-label">Estado del sistema</div>
+                                <div class="stat-value system-status">Listo</div>
+                                <div class="stat-date">Operativo</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Upload Block -->
+                    <div class="upload-block">
+                        <div class="upload-block-content">
+                            <div class="upload-block-icon">📤</div>
+                            <h3>Subir Nueva Imagen</h3>
+                            <p>Carga una fotografía o GeoTIFF de tu terreno para que el sistema analice automáticamente la topografía, calcule presiones, evalúe materiales y genere una recomendación técnica personalizada.</p>
+                            <button class="btn btn-primary btn-large" onclick="openUploadModal()">
+                                <span class="btn-icon">📤</span>
+                                <span>Iniciar Análisis</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Endpoints Preview -->
-            <div class="card endpoints-card">
-                <div class="card-header">
-                    <h2>Endpoints Disponibles</h2>
+            <!-- Terreno Tab -->
+            <div id="terreno-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📍 Análisis del Terreno</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="analysis-section">
+                            <h3>Parámetros Detectados</h3>
+                            <div class="params-grid">
+                                <div class="param-item">
+                                    <span class="param-label">Pendiente Promedio</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Elevación Máxima</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Elevación Mínima</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Zonas Críticas</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <div class="endpoint-item">
-                        <span class="endpoint-method get">GET</span>
-                        <span class="endpoint-path">/api/v1/health</span>
-                        <span class="endpoint-desc">Verificar estado</span>
+            </div>
+
+            <!-- Hidráulica Tab -->
+            <div id="hidraulica-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>💧 Análisis Hidráulico</h2>
                     </div>
-                    <div class="endpoint-item">
-                        <span class="endpoint-method get">GET</span>
-                        <span class="endpoint-path">/api/v1/docs</span>
-                        <span class="endpoint-desc">Documentación</span>
+                    <div class="card-body">
+                        <div class="analysis-section">
+                            <h3>Parámetros Calculados</h3>
+                            <div class="params-grid">
+                                <div class="param-item">
+                                    <span class="param-label">Presión en Fuente</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Caudal Disponible</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Pérdida de Carga</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Riesgo Hidráulico</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="endpoint-item">
-                        <span class="endpoint-method post">POST</span>
-                        <span class="endpoint-path">/api/v1/analysis/elevation</span>
-                        <span class="endpoint-desc">Análisis topográfico</span>
+                </div>
+            </div>
+
+            <!-- Agua Tab -->
+            <div id="agua-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>⚗️ Análisis de Agua y Materiales</h2>
                     </div>
-                    <div class="endpoint-item">
-                        <span class="endpoint-method post">POST</span>
-                        <span class="endpoint-path">/api/v1/analysis/hydraulic</span>
-                        <span class="endpoint-desc">Análisis hidráulico</span>
+                    <div class="card-body">
+                        <div class="analysis-section">
+                            <h3>Composición del Agua</h3>
+                            <div class="params-grid">
+                                <div class="param-item">
+                                    <span class="param-label">pH</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Dureza (CaCO3)</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Conductividad</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Compatibilidad</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="endpoint-item">
-                        <span class="endpoint-method post">POST</span>
-                        <span class="endpoint-path">/api/v1/recommendations</span>
-                        <span class="endpoint-desc">Recomendaciones completas</span>
+                </div>
+            </div>
+
+            <!-- Diseño Tab -->
+            <div id="diseno-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>⚙️ Recomendaciones de Diseño</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="analysis-section">
+                            <h3>Especificaciones Técnicas</h3>
+                            <div class="params-grid">
+                                <div class="param-item">
+                                    <span class="param-label">Tipo de Motobomba</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Diámetro de Tubería</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Material Recomendado</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                                <div class="param-item">
+                                    <span class="param-label">Observaciones</span>
+                                    <span class="param-value">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reporte Tab -->
+            <div id="resultados-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📋 Reporte de Análisis</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="analysis-section">
+                            <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;">
+                                No hay análisis disponibles. 
+                                <a href="#" onclick="openUploadModal(); return false;" style="color: var(--primary-color); text-decoration: underline;">
+                                    Inicia un nuevo análisis
+                                </a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historial Tab -->
+            <div id="historial-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📜 Historial de Análisis</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="analysis-section">
+                            <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;">
+                                El historial de análisis aparecerá aquí.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API / Sistema Tab -->
+            <div id="api-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🔧 API de Sistema de Recomendación</h2>
+                        <span class="status-badge success">Disponible</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="api-description">
+                            <h3>Acerca de esta API</h3>
+                            <p>
+                                Este es un servicio RESTful diseñado para realizar análisis multiparamétricos de redes de riego por goteo. 
+                                La API integra tres módulos especializados que trabajan conjuntamente para proporcionar recomendaciones técnicas completas 
+                                y fundamentadas en datos geoespaciales y parámetros hidráulicos reales.
+                            </p>
+                            
+                            <h3 style="margin-top: 20px;">Módulos de Análisis</h3>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+                                <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid var(--primary-color); padding: 15px; border-radius: 6px;">
+                                    <strong style="color: var(--primary-color);">🗺️ Geoespacial</strong>
+                                    <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px;">Análisis de terreno mediante DEM, pendientes y detección de zonas críticas para riego.</p>
+                                </div>
+                                <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid var(--primary-color); padding: 15px; border-radius: 6px;">
+                                    <strong style="color: var(--primary-color);">💧 Hidráulico</strong>
+                                    <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px;">Cálculos de presión, caudal y pérdidas de carga usando métodos Hazen-Williams y energía.</p>
+                                </div>
+                                <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid var(--primary-color); padding: 15px; border-radius: 6px;">
+                                    <strong style="color: var(--primary-color);">⚗️ Recomendación</strong>
+                                    <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px;">Motor de decisión inteligente que genera especificaciones de motobomba, tuberías y materiales.</p>
+                                </div>
+                            </div>
+
+                            <h3 style="margin-top: 25px;">Endpoints Disponibles</h3>
+                            <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px;">
+                                Accede a estos puntos de entrada para consultar la documentación, verificar el estado del sistema 
+                                y procesar análisis completos de tu infraestructura de riego.
+                            </p>
+                        </div>
+
+                        <div class="endpoints-list" style="margin-top: 25px;">
+                            <div class="endpoint-item">
+                                <span class="endpoint-method get">GET</span>
+                                <div>
+                                    <span class="endpoint-path">/api/v1/health</span>
+                                    <p class="endpoint-desc">Verifica el estado actual del servidor y la disponibilidad de la API</p>
+                                </div>
+                            </div>
+                            <div class="endpoint-item">
+                                <span class="endpoint-method get">GET</span>
+                                <div>
+                                    <span class="endpoint-path">/api/v1/docs</span>
+                                    <p class="endpoint-desc">Obtiene la documentación completa en formato JSON con descripciones de todos los endpoints</p>
+                                </div>
+                            </div>
+                            <div class="endpoint-item">
+                                <span class="endpoint-method post">POST</span>
+                                <div>
+                                    <span class="endpoint-path">/api/v1/analysis/elevation</span>
+                                    <p class="endpoint-desc">Realiza análisis geoespacial: pendientes, elevaciones y zonas críticas a partir de una imagen DEM</p>
+                                </div>
+                            </div>
+                            <div class="endpoint-item">
+                                <span class="endpoint-method post">POST</span>
+                                <div>
+                                    <span class="endpoint-path">/api/v1/analysis/hydraulic</span>
+                                    <p class="endpoint-desc">Calcula parámetros hidráulicos: presiones, caudales y pérdidas basado en datos de fuente y terreno</p>
+                                </div>
+                            </div>
+                            <div class="endpoint-item">
+                                <span class="endpoint-method post">POST</span>
+                                <div>
+                                    <span class="endpoint-path">/api/v1/recommendations</span>
+                                    <p class="endpoint-desc">Genera recomendaciones técnicas completas: especificaciones de bomba, tuberías y observaciones de diseño</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 25px; padding: 20px; background: rgba(46, 204, 113, 0.1); border-left: 4px solid var(--secondary-color); border-radius: 8px;">
+                            <strong style="color: var(--secondary-color);">ℹ️ Información del Sistema</strong>
+                            <div style="margin-top: 12px; font-size: 0.9em; color: var(--text-secondary);">
+                                <p><strong>URL Base:</strong> http://localhost:5000</p>
+                                <p><strong>Versión API:</strong> 1.0</p>
+                                <p><strong>Formato:</strong> JSON</p>
+                                <p><strong>Autenticación:</strong> No requerida</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Acerca Tab -->
+            <div id="acerca-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>ℹ️ Acerca del Proyecto</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="analysis-section">
+                            <h3>Sistema de Recomendación para Redes de Riego por Goteo</h3>
+                            <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 20px;">
+                                Este proyecto es una herramienta desarrollada como seminario de tesis que integra análisis geoespaciales, 
+                                cálculos hidráulicos y un motor de recomendación inteligente para diseñar redes de riego por goteo optimizadas 
+                                basadas en parámetros reales del terreno y del agua disponible.
+                            </p>
+
+                            <h3 style="margin-top: 20px;">Características Principales</h3>
+                            <ul style="color: var(--text-secondary); margin: 15px 0; padding-left: 20px;">
+                                <li style="margin: 10px 0;">🗺️ <strong>Análisis Geoespacial:</strong> Procesa modelos de elevación digital para detectar pendientes y zonas críticas</li>
+                                <li style="margin: 10px 0;">💧 <strong>Cálculos Hidráulicos:</strong> Determina presiones, caudales y pérdidas de carga usando métodos reconocidos</li>
+                                <li style="margin: 10px 0;">⚗️ <strong>Análisis de Agua:</strong> Evalúa compatibilidad del agua con materiales de conducción</li>
+                                <li style="margin: 10px 0;">⚙️ <strong>Recomendaciones Técnicas:</strong> Genera especificaciones de bomba, tuberías y materiales</li>
+                                <li style="margin: 10px 0;">📊 <strong>Reportes Detallados:</strong> Proporciona documentación completa del diseño recomendado</li>
+                            </ul>
+
+                            <h3 style="margin-top: 20px;">Información de la Institución</h3>
+                            <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid var(--primary-color); padding: 15px; border-radius: 8px; margin-top: 15px;">
+                                <p style="color: var(--text-secondary);"><strong>Universidad:</strong> Universidad de Santiago de Chile (USACH)</p>
+                                <p style="color: var(--text-secondary); margin-top: 8px;"><strong>Departamento:</strong> Ingeniería Informática</p>
+                                <p style="color: var(--text-secondary); margin-top: 8px;"><strong>Asignatura:</strong> Seminario 2026</p>
+                                <p style="color: var(--text-secondary); margin-top: 8px;"><strong>Alumno:</strong> Luis González</p>
+                                <p style="color: var(--text-secondary); margin-top: 8px;"><strong>Profesor Guía:</strong> Arturo Álvarez</p>
+                            </div>
+
+                            <h3 style="margin-top: 20px;">Tecnología Utilizada</h3>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 15px;">
+                                <div style="background: rgba(46, 204, 113, 0.1); padding: 12px; border-radius: 6px; text-align: center; color: var(--text-secondary);">
+                                    <strong>Backend</strong><br>
+                                    <span style="font-size: 0.9em; margin-top: 5px; display: block;">Python + Flask</span>
+                                </div>
+                                <div style="background: rgba(52, 152, 219, 0.1); padding: 12px; border-radius: 6px; text-align: center; color: var(--text-secondary);">
+                                    <strong>Frontend</strong><br>
+                                    <span style="font-size: 0.9em; margin-top: 5px; display: block;">HTML5 + CSS3 + JS</span>
+                                </div>
+                                <div style="background: rgba(155, 89, 182, 0.1); padding: 12px; border-radius: 6px; text-align: center; color: var(--text-secondary);">
+                                    <strong>Análisis</strong><br>
+                                    <span style="font-size: 0.9em; margin-top: 5px; display: block;">NumPy + SciPy</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -181,10 +479,49 @@
         </main>
     </div>
 
+    <!-- Modal de Carga de Archivo -->
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📤 Nuevo Análisis - Cargar Imagen</h2>
+                <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon">📁</div>
+                    <h3>Selecciona tu archivo</h3>
+                    <p>Haz click aquí o arrastra un archivo</p>
+                    <p style="font-size: 0.85em; margin-top: 10px; color: var(--text-secondary);">
+                        Formatos aceptados: GeoTIFF, TIFF.
+                    </p>
+                </div>
+                <input 
+                    type="file" 
+                    id="fileInput" 
+                    style="display: none;"
+                    accept=".tif,.tiff,.geotiff,.jpg,.jpeg,.png"
+                    onchange="handleFileSelect(event)"
+                >
+                
+                <div id="filePreview" style="margin-top: 20px; display: none;">
+                    <h4 style="color: var(--primary-color); margin-bottom: 10px;">Archivo seleccionado:</h4>
+                    <div id="selectedFileInfo" style="background: rgba(0, 217, 255, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid var(--primary-color);"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeUploadModal()">Cancelar</button>
+                <button class="btn btn-primary" id="submitBtn" onclick="submitAnalysis()" style="display: none;">
+                    <span class="btn-icon">✓</span> Iniciar Análisis
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="/frontend/script.js"></script>
     <script>
-        // Hacer el primer check al cargar la página
+        // Sincronizar menú y tabs al cargar
         window.addEventListener('load', function() {
+            switchTab('inicio');
             setTimeout(checkHealth, 500);
         });
 

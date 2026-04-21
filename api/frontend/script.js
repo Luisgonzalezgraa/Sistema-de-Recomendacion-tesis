@@ -244,6 +244,313 @@ function formatTime(date) {
 }
 
 /**
+ * Cambia entre tabs y sincroniza el menú lateral
+ */
+function switchTab(tabName) {
+    // Ocultar todos los tabs
+    const tabs = document.querySelectorAll('.tab-content');
+    tabs.forEach(tab => tab.classList.remove('active'));
+
+    // Desactivar todos los botones de tabs
+    const buttons = document.querySelectorAll('.tab-btn');
+    buttons.forEach(btn => btn.classList.remove('active'));
+
+    // Desactivar todos los items del menú lateral
+    const menuLinks = document.querySelectorAll('.menu-link');
+    menuLinks.forEach(link => link.classList.remove('active'));
+
+    // Mostrar tab seleccionado
+    const selectedTab = document.getElementById(tabName + '-tab');
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    }
+
+    // Activar botón de tab seleccionado
+    const selectedBtn = Array.from(buttons).find(btn => 
+        btn.onclick && btn.onclick.toString().includes(`'${tabName}'`)
+    );
+    if (selectedBtn) {
+        selectedBtn.classList.add('active');
+    }
+
+    // Activar item del menú lateral seleccionado
+    const selectedMenuLink = Array.from(menuLinks).find(link => 
+        link.onclick && link.onclick.toString().includes(`'${tabName}'`)
+    );
+    if (selectedMenuLink) {
+        selectedMenuLink.classList.add('active');
+    }
+}
+
+/**
+ * Abre el modal de carga de archivo
+ */
+function openUploadModal() {
+    const modal = document.getElementById('uploadModal');
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+
+/**
+ * Cierra el modal de carga de archivo
+ */
+function closeUploadModal() {
+    const modal = document.getElementById('uploadModal');
+    if (modal) {
+        modal.classList.remove('active');
+        // Limpiar campos
+        document.getElementById('fileInput').value = '';
+        document.getElementById('filePreview').style.display = 'none';
+        document.getElementById('submitBtn').style.display = 'none';
+    }
+}
+
+/**
+ * Maneja la selección de archivo
+ */
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+        const fileInfo = document.getElementById('selectedFileInfo');
+        const filePreview = document.getElementById('filePreview');
+        const submitBtn = document.getElementById('submitBtn');
+
+        // Mostrar información del archivo
+        fileInfo.innerHTML = `
+            <strong>📄 ${file.name}</strong><br>
+            <span style="font-size: 0.85em;">Tamaño: ${(file.size / 1024 / 1024).toFixed(2)} MB</span><br>
+            <span style="font-size: 0.85em;">Tipo: ${file.type}</span>
+        `;
+
+        filePreview.style.display = 'block';
+        submitBtn.style.display = 'flex';
+    }
+}
+
+/**
+ * Inicia el análisis con el archivo seleccionado
+ */
+async function submitAnalysis() {
+    const file = document.getElementById('fileInput').files[0];
+    if (!file) {
+        alert('Por favor selecciona un archivo');
+        return;
+    }
+
+    try {
+        // Crear FormData con el archivo
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Mostrar estado de carga
+        const submitBtn = document.getElementById('submitBtn');
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = '⏳ Enviando...';
+
+        // Enviar archivo al servidor
+        const response = await fetch(`${API_URL}/api/v1/analyze/image`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            console.log('✓ Análisis completado:', data);
+            
+            // Cerrar modal
+            closeUploadModal();
+
+            // Guardar los resultados en memoria para mostrar en Terreno
+            window.analysisResults = data.data;
+
+            // Navegar a la tab de Terreno
+            switchTab('terreno');
+
+            // Mostrar resultado exitoso
+            displayAnalysisResults(data.data);
+            
+            // Restablecer botón
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+        } else {
+            throw new Error(data.message || 'Error al procesar el archivo');
+        }
+        
+    } catch (error) {
+        console.error('Error al enviar archivo:', error);
+        
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '✓ Iniciar Análisis';
+        
+        alert(`Error al enviar el archivo:\n${error.message}`);
+    }
+}
+
+/**
+ * Muestra los resultados del análisis en todos los tabs correspondientes
+ */
+function displayAnalysisResults(analysisData) {
+    try {
+        // ==================== TERRENO ====================
+        const terranoParams = analysisData.terrain_analysis;
+        const terranoItems = document.querySelectorAll('#terreno-tab .param-item');
+        
+        if (terranoItems.length >= 4) {
+            terranoItems[0].querySelector('.param-value').textContent = 
+                terranoParams.slope_percentage + '%';
+            
+            terranoItems[1].querySelector('.param-value').textContent = 
+                terranoParams.max_elevation + ' m';
+            
+            terranoItems[2].querySelector('.param-value').textContent = 
+                terranoParams.min_elevation + ' m';
+            
+            terranoItems[3].querySelector('.param-value').textContent = 
+                terranoParams.critical_zones_percentage + '%';
+        }
+        
+        // ==================== HIDRÁULICA ====================
+        const hidParams = analysisData.hydraulic_analysis;
+        const hidItems = document.querySelectorAll('#hidraulica-tab .param-item');
+        
+        if (hidItems.length >= 4) {
+            hidItems[0].querySelector('.param-value').textContent = 
+                hidParams.source_pressure.toFixed(2) + ' kPa';
+            
+            hidItems[1].querySelector('.param-value').textContent = 
+                hidParams.available_flow.toFixed(2) + ' L/min';
+            
+            hidItems[2].querySelector('.param-value').textContent = 
+                hidParams.pressure_loss.toFixed(2) + ' kPa';
+            
+            hidItems[3].querySelector('.param-value').textContent = 
+                hidParams.hydraulic_risk;
+        }
+        
+        // ==================== AGUA Y MATERIALES ====================
+        const waterParams = analysisData.water_analysis;
+        const waterItems = document.querySelectorAll('#agua-tab .param-item');
+        
+        if (waterItems.length >= 4) {
+            waterItems[0].querySelector('.param-value').textContent = 
+                waterParams.ph.toFixed(2);
+            
+            waterItems[1].querySelector('.param-value').textContent = 
+                waterParams.salinity_ppm.toFixed(0) + ' PPM';
+            
+            waterItems[2].querySelector('.param-value').textContent = 
+                waterParams.hardness_mg_l.toFixed(0) + ' mg/L';
+            
+            waterItems[3].querySelector('.param-value').textContent = 
+                waterParams.water_quality;
+        }
+        
+        // Mostrar material recomendado
+        const waterContent = document.getElementById('agua-tab')?.querySelector('.card-body');
+        if (waterContent) {
+            const materialDiv = document.createElement('div');
+            materialDiv.style.marginTop = '20px';
+            materialDiv.innerHTML = `
+                <div style="background: rgba(0, 217, 255, 0.1); border: 1px solid rgba(0, 217, 255, 0.3); border-radius: 8px; padding: 15px;">
+                    <h3 style="color: #00d9ff; margin: 0 0 10px 0; font-size: 1em;">Recomendación de Material</h3>
+                    <p style="color: var(--text-secondary); margin: 0;"><strong>${waterParams.recommended_material}</strong></p>
+                    <p style="color: var(--text-secondary); margin: 5px 0; font-size: 0.9em;">Compatibilidad: HDPE (${waterParams.material_compatibility.hdpe}) | PVC (${waterParams.material_compatibility.pvc})</p>
+                </div>
+            `;
+            waterContent.appendChild(materialDiv);
+        }
+        
+        // ==================== DISEÑO ====================
+        const design = analysisData.design_recommendations;
+        const disenoContent = document.getElementById('diseno-tab')?.querySelector('.card-body');
+        
+        if (disenoContent) {
+            disenoContent.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <div style="background: rgba(0, 217, 255, 0.1); border: 1px solid rgba(0, 217, 255, 0.2); border-radius: 8px; padding: 15px;">
+                            <p style="color: var(--text-secondary); margin: 0 0 5px 0; font-size: 0.85em;">Área Estimada</p>
+                            <p style="color: #00d9ff; margin: 0; font-size: 1.3em; font-weight: bold;">${design.estimated_area} ha</p>
+                        </div>
+                        <div style="background: rgba(0, 217, 255, 0.1); border: 1px solid rgba(0, 217, 255, 0.2); border-radius: 8px; padding: 15px;">
+                            <p style="color: var(--text-secondary); margin: 0 0 5px 0; font-size: 0.85em;">Manguera Estimada</p>
+                            <p style="color: #00d9ff; margin: 0; font-size: 1.3em; font-weight: bold;">${design.estimated_drip_length.toLocaleString()} m</p>
+                        </div>
+                        <div style="background: rgba(0, 217, 255, 0.1); border: 1px solid rgba(0, 217, 255, 0.2); border-radius: 8px; padding: 15px;">
+                            <p style="color: var(--text-secondary); margin: 0 0 5px 0; font-size: 0.85em;">Complejidad</p>
+                            <p style="color: #00d9ff; margin: 0; font-size: 1.3em; font-weight: bold;">${design.complexity_level}</p>
+                        </div>
+                        <div style="background: rgba(0, 217, 255, 0.1); border: 1px solid rgba(0, 217, 255, 0.2); border-radius: 8px; padding: 15px;">
+                            <p style="color: var(--text-secondary); margin: 0 0 5px 0; font-size: 0.85em;">Costo Estimado</p>
+                            <p style="color: #00d9ff; margin: 0; font-size: 1.3em; font-weight: bold;">${design.estimated_cost_level}</p>
+                        </div>
+                    </div>
+                    
+                    <h3 style="color: #00d9ff; margin: 20px 0 15px 0;">📋 Recomendaciones</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        ${design.recommendations.map((rec, idx) => `
+                            <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid #00d9ff; padding: 12px; border-radius: 4px;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; gap: 10px;">
+                                    <div>
+                                        <p style="color: var(--text-secondary); margin: 0; font-size: 0.85em; font-weight: 600; text-transform: uppercase;">${rec.type}</p>
+                                        <p style="color: var(--text-primary); margin: 5px 0 0 0;">${rec.message}</p>
+                                        <p style="color: #00d9ff; margin: 5px 0 0 0; font-size: 0.9em;"><strong>Acción:</strong> ${rec.action}</p>
+                                    </div>
+                                    <span style="background: ${rec.priority === 'Alto' ? '#ff4757' : rec.priority === 'Medio' ? '#ffa502' : '#2ecc71'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: bold; white-space: nowrap;">${rec.priority}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // ==================== MENSAJE DE ÉXITO ====================
+        const terranoTab = document.getElementById('terreno-tab');
+        const existingResult = terranoTab?.querySelector('[data-upload-result]');
+        
+        if (!existingResult) {
+            const successDiv = document.createElement('div');
+            successDiv.setAttribute('data-upload-result', '');
+            successDiv.style.marginBottom = '20px';
+            successDiv.innerHTML = `
+                <div style="background: rgba(46, 204, 113, 0.1); border: 1px solid #2ecc71; border-radius: 8px; padding: 20px;">
+                    <h3 style="color: #2ecc71; margin: 0 0 10px 0;">✓ Análisis completado</h3>
+                    <p style="color: var(--text-secondary); margin: 0;"><strong>Archivo:</strong> ${analysisData.file_name}</p>
+                    <p style="color: var(--text-secondary); margin: 5px 0;"><strong>Tamaño:</strong> ${(analysisData.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p style="color: var(--text-secondary); margin: 5px 0;"><strong>Dimensiones:</strong> ${analysisData.image_dimensions.width}x${analysisData.image_dimensions.height} px</p>
+                </div>
+            `;
+            
+            const cardBody = terranoTab?.querySelector('.card-body');
+            if (cardBody) {
+                cardBody.insertBefore(successDiv, cardBody.firstChild);
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error mostrando resultados:', error);
+    }
+}
+
+/**
+ * Crea un elemento para mostrar resultados
+ */
+function createResultElement() {
+    const terranoTab = document.getElementById('terreno-tab');
+    const resultDiv = document.createElement('div');
+    resultDiv.setAttribute('data-upload-result', '');
+    if (terranoTab) {
+        terranoTab.insertBefore(resultDiv, terranoTab.firstChild);
+    }
+    return resultDiv;
+}
+
+/**
  * Manejo de errores CORS (si ocurre)
  */
 window.addEventListener('unhandledrejection', event => {
