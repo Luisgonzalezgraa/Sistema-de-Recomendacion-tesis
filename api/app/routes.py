@@ -334,7 +334,9 @@ class ImageAnalysisEndpoint(Resource):
     
     def __init__(self):
         self.geospatial = GeospatialAnalyzer()
+        self.hydraulic = HydraulicCalculator(config.__dict__)
         self.recommendation_engine = RecommendationEngine()
+        self.elevation_service = create_elevation_service(config.GOOGLE_ELEVATION_API_KEY)
     
     def post(self):
         """
@@ -385,7 +387,7 @@ class ImageAnalysisEndpoint(Resource):
             file.save(temp_path)
             logger.info(f"File saved: {temp_path}")
             
-            # Procesar la imagen y extraer parámetros
+            # Procesar la imagen y extraer parametros
             analysis_results = self._analyze_image(temp_path, file.filename)
             
             # Return success with analysis results
@@ -395,6 +397,13 @@ class ImageAnalysisEndpoint(Resource):
                 data=analysis_results
             ).to_dict(), 200
             
+        except ValueError as e:
+            logger.warning(f"Invalid image analysis input: {str(e)}")
+            return APIResponse(
+                success=False,
+                message=str(e),
+                errors=[str(e)]
+            ).to_dict(), 400
         except Exception as e:
             logger.error(f"Error in image analysis: {str(e)}")
             return APIResponse(
@@ -405,303 +414,396 @@ class ImageAnalysisEndpoint(Resource):
     
     def _analyze_image(self, file_path, filename):
         """
-        Analiza la imagen completamente: terreno, hidráulica, agua y recomendaciones
+        Analyze either a DEM GeoTIFF or a georeferenced drone GeoTIFF.
+        RGB imagery is used only for its coordinates; elevation comes from
+        Google Elevation API so the system does not invent values from pixels.
         """
+        import numpy as np
+
+        dem_data = self._read_dem(file_path)
+        source_width = dem_data.get('source_width', dem_data['width'])
+        source_height = dem_data.get('source_height', dem_data['height'])
+        source_pixel_size_x, source_pixel_size_y = self._pixel_size_meters(dem_data)
+        source_area = self._area_hectares(
+            source_width,
+            source_height,
+            source_pixel_size_x,
+            source_pixel_size_y
+        )
+
+        if dem_data.get('array') is None:
+            dem_data = self._build_dem_from_google(dem_data)
+
+        elevation = dem_data['array'].astype('float64')
+        width = dem_data['width']
+        height = dem_data['height']
+
+        valid = np.isfinite(elevation)
+        if not valid.any():
+            raise ValueError("El DEM no contiene valores de elevacion validos.")
+
+        values = elevation[valid]
+        min_elev = float(np.min(values))
+        max_elev = float(np.max(values))
+        median_elev = float(np.median(values))
+        elevation_diff = max_elev - min_elev
+
+        pixel_size_x, pixel_size_y = self._pixel_size_meters(dem_data)
+        slope_percentage = None
+        critical_zones_percentage = None
+
+        if pixel_size_x and pixel_size_y:
+            elevation_for_gradient = elevation.copy()
+            if not np.isfinite(elevation_for_gradient).all():
+                elevation_for_gradient[~np.isfinite(elevation_for_gradient)] = median_elev
+            gradient_y, gradient_x = np.gradient(elevation_for_gradient, pixel_size_y, pixel_size_x)
+            slope = np.sqrt(gradient_x ** 2 + gradient_y ** 2) * 100
+            slope_values = slope[np.isfinite(slope)]
+            if slope_values.size:
+                slope_percentage = float(np.mean(slope_values))
+                p75 = float(np.percentile(slope_values, 75))
+                critical_zones_percentage = float(np.mean(slope_values >= p75) * 100)
+
+        terrain_analysis = {
+            'slope_percentage': round(slope_percentage, 2) if slope_percentage is not None else None,
+            'max_elevation': round(max_elev, 2),
+            'min_elevation': round(min_elev, 2),
+            'median_elevation': round(median_elev, 2),
+            'elevation_difference': round(elevation_diff, 2),
+            'critical_zones_percentage': round(critical_zones_percentage, 2) if critical_zones_percentage is not None else None,
+            'source': dem_data.get('source_label', 'GeoTIFF DEM'),
+            'sample_points': dem_data.get('sample_points'),
+            'pixel_size_x_m': round(pixel_size_x, 3) if pixel_size_x else None,
+            'pixel_size_y_m': round(pixel_size_y, 3) if pixel_size_y else None,
+            'crs': dem_data.get('crs'),
+            'transform': dem_data.get('transform')
+        }
+
+        hydraulic_analysis = self._build_preliminary_hydraulic_analysis(
+            slope_percentage=slope_percentage,
+            elevation_diff=elevation_diff,
+            area_hectares=source_area
+        )
+        water_analysis = self._build_reference_water_analysis()
+
+        if slope_percentage is None:
+            recommendations = [{
+                'priority': 'Informacion',
+                'type': 'DEM',
+                'message': 'Se calcularon elevaciones, pero no pendiente: falta georreferenciacion o tamano de pixel confiable.',
+                'action': 'Usar un GeoTIFF con CRS y transformacion espacial, o configurar Google Elevation API para imagenes de dron.'
+            }]
+        elif slope_percentage > 20:
+            recommendations = [{
+                'priority': 'Medio',
+                'type': 'Pendiente',
+                'message': f'Pendiente media: {slope_percentage:.2f}%. El informe recomienda separar zonas y controlar presion en terrenos con desnivel relevante.',
+                'action': 'Validar sectores de riego, reguladores de presion y diferencia de carga por elevacion.'
+            }]
+        else:
+            recommendations = [{
+                'priority': 'Bajo',
+                'type': 'Pendiente',
+                'message': f'Pendiente media: {slope_percentage:.2f}%. El terreno no muestra una restriccion topografica severa para el diseno preliminar.',
+                'action': 'Continuar con calculo hidraulico usando caudal, diametro, longitud y presion disponible.'
+            }]
+
+        recommendations.extend([
+            self._hydraulic_recommendation(hydraulic_analysis),
+            self._water_material_recommendation(water_analysis)
+        ])
+
+        estimated_drip_length = self._estimate_drip_length(source_area)
+        design_analysis = {
+            'recommendations': recommendations,
+            'estimated_area': source_area,
+            'estimated_drip_length': estimated_drip_length,
+            'complexity_level': self._classify_design_complexity(
+                slope_percentage,
+                source_area,
+                hydraulic_analysis.get('hydraulic_risk')
+            ),
+            'estimated_cost_level': self._classify_cost_level(
+                slope_percentage,
+                source_area,
+                hydraulic_analysis.get('hydraulic_risk')
+            )
+        }
+
+        return {
+            'file_name': filename,
+            'file_size': os.path.getsize(file_path),
+            'image_dimensions': {
+                'width': int(source_width),
+                'height': int(source_height),
+                'pixels': int(source_width * source_height)
+            },
+            'terrain_analysis': terrain_analysis,
+            'hydraulic_analysis': hydraulic_analysis,
+            'water_analysis': water_analysis,
+            'design_recommendations': design_analysis,
+            'status': 'completed',
+            'message': 'Analisis completado desde DEM GeoTIFF o Google Elevation API'
+        }
+
+    def _read_dem(self, file_path):
+        try:
+            import rasterio
+            import numpy as np
+
+            with rasterio.open(file_path) as src:
+                transform = src.transform
+                has_spatial_reference = bool(src.crs)
+                dem_data = {
+                    'array': None,
+                    'width': src.width,
+                    'height': src.height,
+                    'source_width': src.width,
+                    'source_height': src.height,
+                    'band_count': src.count,
+                    'crs': str(src.crs) if src.crs else None,
+                    'transform': tuple(transform)[:6] if has_spatial_reference else None,
+                    'pixel_size_x': abs(transform.a) if has_spatial_reference and transform else None,
+                    'pixel_size_y': abs(transform.e) if has_spatial_reference and transform else None,
+                    'bounds': tuple(src.bounds) if has_spatial_reference and src.bounds else None,
+                    'source_label': 'GeoTIFF georreferenciado + Google Elevation API'
+                }
+
+                if src.count == 1:
+                    band = src.read(1, masked=True).astype('float64')
+                    dem_data['array'] = band.filled(np.nan)
+                    dem_data['source_label'] = 'GeoTIFF DEM de una banda'
+                elif not has_spatial_reference:
+                    raise ValueError(
+                        "La imagen tiene varias bandas y no trae georreferenciacion. "
+                        "Para una fotografia de dron usa GeoTIFF/ortomosaico con CRS y bounds."
+                    )
+
+                return dem_data
+        except ImportError:
+            pass
+
         try:
             from PIL import Image
             import numpy as np
-            import random
-            
-            # Abrir imagen
+
             img = Image.open(file_path)
-            img_array = np.array(img)
-            
-            # Obtener dimensiones
-            width, height = img.size
-            
-            # Calcular estadísticas básicas (simular análisis geoespacial)
-            if len(img_array.shape) == 3:
-                # Convertir a escala de grises para análisis
-                gray = np.mean(img_array, axis=2)
-            else:
-                gray = img_array
-            
-            # ==================== ANÁLISIS DEL TERRENO ====================
-            # Calcular pendiente promedio basado en gradientes
-            gradient_x = np.gradient(gray, axis=1)
-            gradient_y = np.gradient(gray, axis=0)
-            slope_angle = np.arctan(np.sqrt(gradient_x**2 + gradient_y**2))
-            slope_percentage = np.tan(np.mean(slope_angle)) * 100
-            
-            # Simular elevaciones basadas en valores de píxeles
-            min_elevation = 100  # metros
-            max_elevation = min_elevation + (np.max(gray) / 255.0) * 500  # rango de 500m
-            min_elev = np.min(gray) / 255.0 * max_elevation
-            
-            # Detectar zonas críticas (áreas con mucha variación)
-            variance = np.var(gray)
-            critical_zones = int((variance / 10000) * 100)  # porcentaje
-            
-            terrain_analysis = {
-                'slope_percentage': round(float(min(slope_percentage, 100)), 2),
-                'max_elevation': round(float(max_elevation), 2),
-                'min_elevation': round(float(min_elev), 2),
-                'elevation_difference': round(float(max_elevation - min_elev), 2),
-                'critical_zones_percentage': min(critical_zones, 100)
-            }
-            
-            # ==================== ANÁLISIS HIDRÁULICO ====================
-            # Calcular parámetros basados en pendiente y elevación
-            elevation_diff = terrain_analysis['elevation_difference']
-            slope_pct = terrain_analysis['slope_percentage']
-            
-            # Presión inicial (basada en elevación)
-            source_pressure = (elevation_diff / 10) * 0.098  # kPa por metro
-            
-            # Caudal disponible (inversamente proporcional a pendiente muy pronunciada)
-            base_flow = 50  # L/min
-            if slope_pct > 50:
-                flow_rate = base_flow * 0.7
-            elif slope_pct > 30:
-                flow_rate = base_flow * 0.85
-            else:
-                flow_rate = base_flow
-            
-            # Pérdida de carga (proporcional a longitud y diámetro)
-            pipe_length = 500  # metros (estimado)
-            pipe_diameter = 20  # mm
-            pressure_loss = (flow_rate / pipe_diameter) * (pipe_length / 100)
-            
-            # Presión final
-            final_pressure = max(source_pressure - pressure_loss, 0)
-            
-            # Riesgo hidráulico
-            if slope_pct > 40:
-                hydraulic_risk = "Alto"
-            elif slope_pct > 20:
-                hydraulic_risk = "Medio"
-            else:
-                hydraulic_risk = "Bajo"
-            
-            hydraulic_analysis = {
-                'source_pressure': round(float(source_pressure), 2),
-                'available_flow': round(float(flow_rate), 2),
-                'pressure_loss': round(float(pressure_loss), 2),
-                'final_pressure': round(float(final_pressure), 2),
-                'hydraulic_risk': hydraulic_risk,
-                'pipe_diameter': pipe_diameter,
-                'pipe_length': pipe_length
-            }
-            
-            # ==================== ANÁLISIS DE AGUA Y MATERIALES ====================
-            # Simular composición del agua basada en características de la imagen
-            brightness = np.mean(gray)
-            
-            # pH estimado
-            if brightness > 200:
-                ph = 7.5 + random.uniform(0, 0.5)  # aguas claras tienden a pH neutral
-            else:
-                ph = 7.0 + random.uniform(-0.3, 0.3)
-            
-            # Salinidad estimada (PPM)
-            salinity = (brightness / 255.0) * 2000
-            
-            # Dureza del agua
-            hardness = (brightness / 255.0) * 500
-            
-            # Compatibilidad de materiales
-            material_compatibility = {
-                'hdpe': "Excelente",  # HDPE es muy compatible
-                'pvc': "Buena" if ph < 8.5 else "Media",
-                'acero_galvanizado': "Media" if ph > 8 else "Buena",
-                'tubo_riego': "Excelente",
-                'goteros': "Excelente"
-            }
-            
-            # Recomendación de material principal
-            if ph > 8.5 or salinity > 1500:
-                recommended_material = "HDPE (Mayor durabilidad en aguas alcalinas)"
-            elif ph < 6.5:
-                recommended_material = "PVC (Resistente en aguas ácidas)"
-            else:
-                recommended_material = "HDPE o PVC (Ambos son apropiados)"
-            
-            water_analysis = {
-                'ph': round(float(ph), 2),
-                'salinity_ppm': round(float(salinity), 2),
-                'hardness_mg_l': round(float(hardness), 2),
-                'material_compatibility': material_compatibility,
-                'recommended_material': recommended_material,
-                'water_quality': "Buena" if 6.5 < ph < 8.5 else "Requiere tratamiento"
-            }
-            
-            # ==================== RECOMENDACIONES DE DISEÑO ====================
-            recommendations = []
-            
-            # Recomendación por pendiente
-            if slope_pct > 40:
-                recommendations.append({
-                    'priority': 'Alto',
-                    'type': 'Pendiente',
-                    'message': 'Pendiente muy pronunciada detectada. Instalar reguladores de presión en tramos bajos.',
-                    'action': 'Usar sistemas de riego con control de presión'
-                })
-            elif slope_pct > 20:
-                recommendations.append({
-                    'priority': 'Medio',
-                    'type': 'Pendiente',
-                    'message': 'Pendiente moderada. Considerar dos zonas de riego separadas.',
-                    'action': 'Dividir en zonas de riego por elevación'
-                })
-            
-            # Recomendación por caudal
-            if flow_rate < 30:
-                recommendations.append({
-                    'priority': 'Alto',
-                    'type': 'Caudal',
-                    'message': 'Caudal bajo detectado. Aumentar la fuente de agua o usar goteros de bajo caudal.',
-                    'action': 'Seleccionar goteros de 2-4 L/h'
-                })
-            else:
-                recommendations.append({
-                    'priority': 'Bajo',
-                    'type': 'Caudal',
-                    'message': f'Caudal adecuado: {flow_rate:.1f} L/min disponible.',
-                    'action': 'Usar goteros estándar de 4-8 L/h'
-                })
-            
-            # Recomendación por agua
-            if salinity > 1500:
-                recommendations.append({
-                    'priority': 'Alto',
-                    'type': 'Agua',
-                    'message': 'Agua salina detectada. Requiere filtración adicional.',
-                    'action': 'Instalar filtro de sedimentos + filtro de arena'
-                })
-            
-            if ph > 8.5:
-                recommendations.append({
-                    'priority': 'Medio',
-                    'type': 'Agua',
-                    'message': 'Agua muy alcalina. Considerar acidulante para riego.',
-                    'action': 'Aplicar ácido fosfórico o sulfúrico según dosis'
-                })
-            
-            # Recomendación por materiales
-            recommendations.append({
-                'priority': 'Alto',
-                'type': 'Materiales',
-                'message': f'Material recomendado: {recommended_material}',
-                'action': 'Especificar en compra de tuberías y accesorios'
-            })
-            
-            # Recomendación general de diseño
-            total_area = (width * height) / 1_000_000  # km² aproximados
-            estimated_drip_length = total_area * 10000  # metros de manguera
-            
-            recommendations.append({
-                'priority': 'Información',
-                'type': 'Diseño General',
-                'message': f'Área estimada: {total_area:.2f} hectáreas. Longitud de riego estimada: {estimated_drip_length:.0f} metros.',
-                'action': 'Usar esta información para calcular costos de materiales'
-            })
-            
-            design_analysis = {
-                'recommendations': recommendations,
-                'estimated_area': round(total_area, 2),
-                'estimated_drip_length': round(estimated_drip_length, 2),
-                'complexity_level': 'Complejo' if slope_pct > 40 else 'Moderado' if slope_pct > 20 else 'Simple',
-                'estimated_cost_level': 'Alto' if slope_pct > 40 or salinity > 1500 else 'Medio' if slope_pct > 20 else 'Bajo'
-            }
-            
+            if len(img.getbands()) != 1:
+                raise ValueError(
+                    "La imagen tiene varias bandas pero no pude leer georreferenciacion. "
+                    "Exportala como GeoTIFF con CRS para poder consultar Google Elevation API."
+                )
             return {
-                'file_name': filename,
-                'file_size': os.path.getsize(file_path),
-                'image_dimensions': {
-                    'width': int(width),
-                    'height': int(height),
-                    'pixels': int(width * height)
-                },
-                'terrain_analysis': terrain_analysis,
-                'hydraulic_analysis': hydraulic_analysis,
-                'water_analysis': water_analysis,
-                'design_recommendations': design_analysis,
-                'status': 'completed',
-                'message': 'Complete image analysis finished successfully'
+                'array': np.array(img, dtype='float64'),
+                'width': img.size[0],
+                'height': img.size[1],
+                'source_width': img.size[0],
+                'source_height': img.size[1],
+                'band_count': 1,
+                'crs': None,
+                'transform': None,
+                'pixel_size_x': None,
+                'pixel_size_y': None,
+                'bounds': None,
+                'source_label': 'Imagen de una banda sin georreferenciacion'
             }
-            
-        except ImportError:
-            logger.warning("PIL not available, returning mock analysis")
-            return self._mock_full_analysis(filename, file_path)
+        except ValueError:
+            raise
         except Exception as e:
-            logger.error(f"Error analyzing image: {str(e)}")
-            return self._mock_full_analysis(filename, file_path)
-    
-    def _mock_full_analysis(self, filename, file_path):
-        """
-        Retorna análisis simulado completo cuando no se puede procesar la imagen
-        """
-        import random
-        file_size = os.path.getsize(file_path)
-        
-        slope = random.uniform(5, 45)
-        flow = random.uniform(30, 80)
-        
+            raise ValueError(
+                "No pude leer el archivo como GeoTIFF. Para la tesis sube un DEM de una banda "
+                "o una ortofoto GeoTIFF georreferenciada para consultar Google Elevation API."
+            ) from e
+
+    def _build_preliminary_hydraulic_analysis(self, slope_percentage, elevation_diff, area_hectares):
+        initial_pressure_kpa = 150.0
+        area = area_hectares if area_hectares and area_hectares > 0 else 1.0
+        design_sector_ha = min(area, 3.0)
+        available_flow_l_min = max(20.0, design_sector_ha * 35.0)
+        flow_m3_s = available_flow_l_min / 60000
+        pipe_length_m = max(80.0, (design_sector_ha * 10000) ** 0.5 * 1.25)
+        pipe_diameter_m = 0.04 if design_sector_ha >= 1 else 0.032
+
+        friction_loss_bar = self.hydraulic.calculate_hazen_williams_loss(
+            length=pipe_length_m,
+            flow_rate=flow_m3_s,
+            diameter=pipe_diameter_m,
+            c_coefficient=150
+        )
+        elevation_pressure_kpa = elevation_diff * 9.81
+        friction_loss_kpa = friction_loss_bar * 100
+        total_pressure_loss_kpa = friction_loss_kpa + elevation_pressure_kpa
+        final_pressure_kpa = initial_pressure_kpa - total_pressure_loss_kpa
+
+        if final_pressure_kpa < 70 or total_pressure_loss_kpa > 80 or (slope_percentage or 0) > 20:
+            risk = 'Alto'
+        elif final_pressure_kpa < 100 or total_pressure_loss_kpa > 45 or (slope_percentage or 0) > 8:
+            risk = 'Medio'
+        else:
+            risk = 'Bajo'
+
         return {
-            'file_name': filename,
-            'file_size': file_size,
-            'image_dimensions': {
-                'width': 1024,
-                'height': 1024,
-                'pixels': 1048576
-            },
-            'terrain_analysis': {
-                'slope_percentage': round(slope, 2),
-                'max_elevation': round(random.uniform(500, 2000), 2),
-                'min_elevation': round(random.uniform(100, 400), 2),
-                'elevation_difference': round(random.uniform(100, 1000), 2),
-                'critical_zones_percentage': random.randint(10, 50)
-            },
-            'hydraulic_analysis': {
-                'source_pressure': round(random.uniform(50, 200), 2),
-                'available_flow': round(flow, 2),
-                'pressure_loss': round(random.uniform(10, 40), 2),
-                'final_pressure': round(random.uniform(30, 150), 2),
-                'hydraulic_risk': random.choice(['Bajo', 'Medio', 'Alto']),
-                'pipe_diameter': 20,
-                'pipe_length': 500
-            },
-            'water_analysis': {
-                'ph': round(random.uniform(6.5, 8.5), 2),
-                'salinity_ppm': round(random.uniform(500, 2000), 2),
-                'hardness_mg_l': round(random.uniform(100, 400), 2),
-                'material_compatibility': {
-                    'hdpe': 'Excelente',
-                    'pvc': 'Buena',
-                    'acero_galvanizado': 'Media',
-                    'tubo_riego': 'Excelente',
-                    'goteros': 'Excelente'
-                },
-                'recommended_material': 'HDPE o PVC',
-                'water_quality': 'Buena'
-            },
-            'design_recommendations': {
-                'recommendations': [
-                    {
-                        'priority': 'Alto',
-                        'type': 'Pendiente',
-                        'message': 'Diseño personalizado según análisis',
-                        'action': 'Revisar recomendaciones'
-                    }
-                ],
-                'estimated_area': round(random.uniform(10, 100), 2),
-                'estimated_drip_length': round(random.uniform(5000, 50000), 2),
-                'complexity_level': random.choice(['Simple', 'Moderado', 'Complejo']),
-                'estimated_cost_level': random.choice(['Bajo', 'Medio', 'Alto'])
-            },
-            'status': 'completed',
-            'message': 'Complete image analysis finished (mock data)'
+            'source_pressure': round(initial_pressure_kpa, 2),
+            'available_flow': round(available_flow_l_min, 2),
+            'pressure_loss': round(total_pressure_loss_kpa, 2),
+            'final_pressure': round(final_pressure_kpa, 2),
+            'hydraulic_risk': risk,
+            'pipe_diameter': round(pipe_diameter_m * 1000, 0),
+            'pipe_length': round(pipe_length_m, 2),
+            'design_sector_area': round(design_sector_ha, 2),
+            'elevation_pressure_change': round(elevation_pressure_kpa, 2),
+            'friction_loss': round(friction_loss_kpa, 2),
+            'calculation_basis': 'Preliminar por sector: desnivel DEM/Google + Hazen-Williams con supuestos de diseno.'
         }
+
+    def _build_reference_water_analysis(self):
+        return {
+            'ph': 7.2,
+            'salinity_ppm': 450,
+            'hardness_mg_l': 180,
+            'material_compatibility': {
+                'hdpe': 'Excelente',
+                'pvc': 'Buena',
+                'acero_galvanizado': 'Media',
+                'goteros': 'Buena'
+            },
+            'recommended_material': 'HDPE 16-20 mm con filtrado de malla/disco',
+            'water_quality': 'Buena referencial',
+            'message': 'Perfil referencial usado cuando no hay analisis de laboratorio; debe validarse con pH, salinidad y dureza reales.'
+        }
+
+    def _hydraulic_recommendation(self, hydraulic_analysis):
+        risk = hydraulic_analysis.get('hydraulic_risk')
+        priority = 'Alto' if risk == 'Alto' else 'Medio' if risk == 'Medio' else 'Bajo'
+        return {
+            'priority': priority,
+            'type': 'Hidraulica',
+            'message': (
+                f"Riesgo hidraulico {risk}. Perdida estimada "
+                f"{hydraulic_analysis.get('pressure_loss')} kPa considerando desnivel y friccion."
+            ),
+            'action': 'Validar caudal, diametro y longitud real; recalcular Hazen-Williams antes de comprar materiales.'
+        }
+
+    def _water_material_recommendation(self, water_analysis):
+        return {
+            'priority': 'Medio',
+            'type': 'Agua y materiales',
+            'message': (
+                f"Perfil de agua referencial: pH {water_analysis['ph']}, "
+                f"salinidad {water_analysis['salinity_ppm']} ppm, dureza {water_analysis['hardness_mg_l']} mg/L."
+            ),
+            'action': f"Material preliminar: {water_analysis['recommended_material']}. Confirmar con analisis de agua real."
+        }
+
+    def _estimate_drip_length(self, area_hectares, row_spacing_m=2.0):
+        if not area_hectares:
+            return None
+        return round((area_hectares * 10000) / row_spacing_m, 0)
+
+    def _classify_design_complexity(self, slope_percentage, area_hectares, hydraulic_risk):
+        slope = slope_percentage or 0
+        area = area_hectares or 0
+        if hydraulic_risk == 'Alto' or slope > 20 or area > 20:
+            return 'Alta'
+        if hydraulic_risk == 'Medio' or slope > 8 or area > 5:
+            return 'Media'
+        return 'Baja'
+
+    def _classify_cost_level(self, slope_percentage, area_hectares, hydraulic_risk):
+        slope = slope_percentage or 0
+        area = area_hectares or 0
+        if hydraulic_risk == 'Alto' or area > 20 or slope > 20:
+            return 'Alto'
+        if hydraulic_risk == 'Medio' or area > 5 or slope > 8:
+            return 'Medio'
+        return 'Bajo'
+
+    def _build_dem_from_google(self, image_data, grid_size=15):
+        import numpy as np
+
+        if self.elevation_service.__class__.__name__ == 'MockElevationService':
+            raise ValueError(
+                "Para analizar una fotografia/ortofoto GeoTIFF se requiere GOOGLE_ELEVATION_API_KEY. "
+                "Sin esa clave el sistema no debe generar elevaciones simuladas."
+            )
+
+        west, south, east, north = self._bounds_wgs84(image_data)
+        if west == east or south == north:
+            raise ValueError("El GeoTIFF no tiene una extension geografica valida.")
+
+        lons = np.linspace(west, east, grid_size)
+        lats = np.linspace(north, south, grid_size)
+        points = [(float(lat), float(lon)) for lat in lats for lon in lons]
+        elevations = self.elevation_service.get_elevations_batch(points)
+        elevation_grid = np.array(
+            [np.nan if value is None else float(value) for value in elevations],
+            dtype='float64'
+        ).reshape((grid_size, grid_size))
+
+        if not np.isfinite(elevation_grid).any():
+            raise ValueError("Google Elevation API no devolvio elevaciones validas para esta imagen.")
+
+        mid_lat = float((north + south) / 2)
+        mid_lon = float((west + east) / 2)
+        pixel_size_x_m = self.geospatial._haversine_distance(mid_lat, west, mid_lat, east) / (grid_size - 1)
+        pixel_size_y_m = self.geospatial._haversine_distance(north, mid_lon, south, mid_lon) / (grid_size - 1)
+
+        result = dict(image_data)
+        result.update({
+            'array': elevation_grid,
+            'width': grid_size,
+            'height': grid_size,
+            'pixel_size_x_m': pixel_size_x_m,
+            'pixel_size_y_m': pixel_size_y_m,
+            'bounds': (west, south, east, north),
+            'crs': 'EPSG:4326',
+            'sample_points': len(points),
+            'source_label': 'Google Elevation API sobre grilla GeoTIFF'
+        })
+        return result
+
+    def _bounds_wgs84(self, image_data):
+        bounds = image_data.get('bounds')
+        crs = image_data.get('crs')
+        if not bounds or not crs:
+            raise ValueError("El GeoTIFF necesita CRS y bounds para obtener latitud/longitud.")
+
+        if '4326' in crs:
+            return bounds
+
+        try:
+            from rasterio.warp import transform_bounds
+            return transform_bounds(crs, 'EPSG:4326', *bounds, densify_pts=21)
+        except Exception as e:
+            raise ValueError("No pude convertir los bounds del GeoTIFF a WGS84.") from e
+
+    def _pixel_size_meters(self, dem_data):
+        if dem_data.get('pixel_size_x_m') and dem_data.get('pixel_size_y_m'):
+            return dem_data['pixel_size_x_m'], dem_data['pixel_size_y_m']
+
+        pixel_size_x = dem_data.get('pixel_size_x')
+        pixel_size_y = dem_data.get('pixel_size_y')
+        crs = dem_data.get('crs') or ''
+        bounds = dem_data.get('bounds')
+
+        if not pixel_size_x or not pixel_size_y:
+            return None, None
+
+        if '4326' in crs and bounds:
+            import math
+            west, south, east, north = bounds
+            lat = (south + north) / 2
+            meters_per_degree_lat = 111_320
+            meters_per_degree_lon = 111_320 * math.cos(math.radians(lat))
+            return pixel_size_x * meters_per_degree_lon, pixel_size_y * meters_per_degree_lat
+
+        return pixel_size_x, pixel_size_y
+
+    def _area_hectares(self, width, height, pixel_size_x, pixel_size_y):
+        if not pixel_size_x or not pixel_size_y:
+            return None
+        return round((width * pixel_size_x * height * pixel_size_y) / 10_000, 2)
 
 
 def register_routes(app, api):
@@ -790,7 +892,7 @@ def register_routes(app, api):
                 logger.error(f"Dashboard file not found at: {index_path}")
                 return {
                     'error': 'Panel de control no encontrado',
-                    'message': 'Los archivos de la interfaz no están disponibles. Compruebe la instalación.',
+                    'message': 'Los archivos de la interfaz no estÃ¡n disponibles. Compruebe la instalaciÃ³n.',
                     'debug_info': {
                         'looking_for': index_path,
                         'frontend_path': frontend_path,

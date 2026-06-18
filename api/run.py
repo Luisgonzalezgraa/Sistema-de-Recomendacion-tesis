@@ -35,7 +35,7 @@ def main():
     debug = env == 'development'
     
     logger.info(f"API starting on {host}:{port}")
-    app.run(host=host, port=port, debug=debug)
+    app.run(host=host, port=port, debug=debug, use_reloader=False)
 
 
 if __name__ == '__main__':

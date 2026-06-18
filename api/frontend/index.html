@@ -3,516 +3,350 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Recomendación - Riego</title>
+    <title>Sistema de Recomendaci&oacute;n - Riego</title>
     <link rel="stylesheet" href="/frontend/style.css">
 </head>
 <body>
-    <!-- Header -->
-    <div class="header">
-        <div class="header-content">
-            <div class="icon-header">
-                <h1>🌾</h1>
-            </div>
-            <h1>Sistema de Recomendación</h1>
+    <svg class="icon-sprite" aria-hidden="true" focusable="false">
+        <symbol id="icon-home" viewBox="0 0 24 24">
+            <path d="M3 11.2 12 4l9 7.2"></path>
+            <path d="M5.5 10.2V20h13v-9.8"></path>
+            <path d="M9.5 20v-5h5v5"></path>
+        </symbol>
+        <symbol id="icon-terrain" viewBox="0 0 24 24">
+            <path d="M3 18h18"></path>
+            <path d="m4 18 5.2-9 3.3 5 2.4-3.7L21 18"></path>
+            <path d="M8.8 13.5h6.8"></path>
+        </symbol>
+        <symbol id="icon-water" viewBox="0 0 24 24">
+            <path d="M12 3.5s6 6.2 6 10.4a6 6 0 0 1-12 0C6 9.7 12 3.5 12 3.5Z"></path>
+            <path d="M9.2 14.2c.5 1.4 1.5 2.2 2.8 2.2"></path>
+        </symbol>
+        <symbol id="icon-materials" viewBox="0 0 24 24">
+            <path d="M9 3h6"></path>
+            <path d="M10 3v5.4l-4.7 8A3 3 0 0 0 7.9 21h8.2a3 3 0 0 0 2.6-4.6l-4.7-8V3"></path>
+            <path d="M7.3 15h9.4"></path>
+        </symbol>
+        <symbol id="icon-recommendation" viewBox="0 0 24 24">
+            <path d="M8 4h8"></path>
+            <path d="M6 7h12v14H6z"></path>
+            <path d="m9 14 2 2 4-5"></path>
+        </symbol>
+        <symbol id="icon-report" viewBox="0 0 24 24">
+            <path d="M7 3h7l4 4v14H7z"></path>
+            <path d="M14 3v5h4"></path>
+            <path d="M10 12h5"></path>
+            <path d="M10 16h5"></path>
+        </symbol>
+        <symbol id="icon-system" viewBox="0 0 24 24">
+            <path d="M5 5h14v10H5z"></path>
+            <path d="M9 19h6"></path>
+            <path d="M12 15v4"></path>
+            <path d="M8 9h2"></path>
+            <path d="M12 9h4"></path>
+        </symbol>
+    </svg>
+
+    <header class="topbar">
+        <div class="brand-lockup">
+            <span class="status-dot"></span>
+            <span class="brand-mark">RIEGO</span>
+            <span class="brand-title">AN&Aacute;LISIS SYS</span>
+            <span class="brand-version">v1.0</span>
         </div>
-    </div>
-    <!-- Sidebar Menu -->
-    <div class="sidebar">
-        <nav class="sidebar-menu">
-            <ul>
-                <li class="menu-item">
+        <div class="topbar-meta">
+            <span>Zona estudio <strong id="currentZone">Sin cargar</strong></span>
+            <span>Proyecci&oacute;n <strong>UTM / WGS84</strong></span>
+            <span>&Aacute;rea <strong id="topArea">--</strong></span>
+            <span>Estado <strong id="apiState">Verificando</strong></span>
+        </div>
+    </header>
+
+    <aside class="sidebar">
+        <nav class="sidebar-menu" aria-label="Navegaci&oacute;n principal">
                     <a href="#" class="menu-link active" onclick="switchTab('inicio'); return false;">
-                        <span class="menu-icon">🏠</span>
-                        <span class="menu-text">Inicio</span>
+                <span class="menu-glyph"><svg><use href="#icon-home"></use></svg></span>
+                <span>
+                    <strong>Inicio</strong>
+                    <small>Resumen operativo</small>
+                </span>
                     </a>
-                </li>
-                <li class="menu-item">
                     <a href="#" class="menu-link" onclick="switchTab('terreno'); return false;">
-                        <span class="menu-icon">🗺️</span>
-                        <span class="menu-text">Terreno</span>
+                <span class="menu-glyph"><svg><use href="#icon-terrain"></use></svg></span>
+                <span>
+                    <strong>An&aacute;lisis Terreno</strong>
+                    <small id="terrainStatus">Sin datos</small>
+                </span>
                     </a>
-                </li>
-                <li class="menu-item">
                     <a href="#" class="menu-link" onclick="switchTab('hidraulica'); return false;">
-                        <span class="menu-icon">💧</span>
-                        <span class="menu-text">Hidráulica</span>
+                <span class="menu-glyph"><svg><use href="#icon-water"></use></svg></span>
+                <span>
+                    <strong>An&aacute;lisis Hidr&aacute;ulico</strong>
+                    <small id="hydraulicStatus">Standby</small>
+                </span>
                     </a>
-                </li>
-                <li class="menu-item">
                     <a href="#" class="menu-link" onclick="switchTab('agua'); return false;">
-                        <span class="menu-icon">⚗️</span>
-                        <span class="menu-text">Agua y materiales</span>
+                <span class="menu-glyph"><svg><use href="#icon-materials"></use></svg></span>
+                <span>
+                    <strong>Agua y Materiales</strong>
+                    <small id="waterStatus">Standby</small>
+                </span>
                     </a>
-                </li>
-                <li class="menu-item">
                     <a href="#" class="menu-link" onclick="switchTab('diseno'); return false;">
-                        <span class="menu-icon">⚙️</span>
-                        <span class="menu-text">Diseño</span>
+                <span class="menu-glyph"><svg><use href="#icon-recommendation"></use></svg></span>
+                <span>
+                    <strong>Recomendaci&oacute;n</strong>
+                    <small id="designStatus">Pendiente</small>
+                </span>
                     </a>
-                </li>
-                <li class="menu-item">
                     <a href="#" class="menu-link" onclick="switchTab('resultados'); return false;">
-                        <span class="menu-icon">📋</span>
-                        <span class="menu-text">Reporte</span>
+                <span class="menu-glyph"><svg><use href="#icon-report"></use></svg></span>
+                <span>
+                    <strong>Reporte</strong>
+                    <small>Salida t&eacute;cnica</small>
+                </span>
                     </a>
-                </li>
-                <li class="menu-item">
-                    <a href="#" class="menu-link" onclick="switchTab('historial'); return false;">
-                        <span class="menu-icon">📜</span>
-                        <span class="menu-text">Historial</span>
-                    </a>
-                </li>
-                <li class="menu-item">
                     <a href="#" class="menu-link" onclick="switchTab('api'); return false;">
-                        <span class="menu-icon">🔧</span>
-                        <span class="menu-text">API / Sistema</span>
+                <span class="menu-glyph"><svg><use href="#icon-system"></use></svg></span>
+                <span>
+                    <strong>Sistema</strong>
+                    <small id="systemStatus">Conectando</small>
+                </span>
                     </a>
-                </li>
-                <li class="menu-item">
-                    <a href="#" class="menu-link" onclick="switchTab('acerca'); return false;">
-                        <span class="menu-icon">ℹ️</span>
-                        <span class="menu-text">Acerca</span>
-                    </a>
-                </li>
-            </ul>
         </nav>
-    </div>
+    </aside>
 
-    <div class="container"> 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Tabs Navigation -->
-            <div class="tabs-container">
-                <div class="tabs-nav">
-                    <button class="tab-btn active" onclick="switchTab('inicio')">
-                        <span class="tab-icon">🏠</span>
-                        <span class="tab-label">Inicio</span>
-                    </button>
-                    <button class="tab-btn" onclick="openUploadModal()">
-                        <span class="tab-icon">📤</span>
-                        <span class="tab-label">Nuevo Análisis</span>
-                    </button>
+    <main class="workspace">
+        <!--
+        <section class="tabs-strip" aria-label="M&oacute;dulos">
+            <button class="tab-btn active" onclick="switchTab('inicio')">Inicio</button>
+            <button class="tab-btn" onclick="switchTab('terreno')">DEM</button>
+            <button class="tab-btn" onclick="switchTab('hidraulica')">HID</button>
+            <button class="tab-btn" onclick="switchTab('agua')">MAT</button>
+            <button class="tab-btn" onclick="switchTab('diseno')">REC</button>
+            <button class="tab-btn" onclick="switchTab('resultados')">REP</button>
+            <button class="tab-btn" onclick="switchTab('api')">API</button>
+        </section>
+        -->
+        <section id="inicio-tab" class="tab-content active">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Panel operativo</p>
+                    <h1>Sistema de recomendaci&oacute;n para riego por goteo</h1>
+                    <p>An&aacute;lisis geoespacial, hidr&aacute;ulico y de materiales a partir de imagen territorial.</p>
                 </div>
+                <button class="btn btn-primary" onclick="openUploadModal()">Cargar imagen</button>
             </div>
 
-            <!-- Tab Content -->
-            <!-- Inicio Tab -->
-            <div id="inicio-tab" class="tab-content active">
-                <div class="inicio-container">
-                    <div class="welcome-header">
-                        <h2>🌾 Sistema de Recomendación para Riego</h2>
-                        <p>Análisis completo de terreno, hidráulica y diseño de red de riego por goteo</p>
+            <div class="metric-grid">
+                <article class="metric-card">
+                    <span class="metric-label">Imagen analizada</span>
+                    <strong id="metricFile">--</strong>
+                    <small id="metricSize">Sin archivo</small>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">Pendiente media</span>
+                    <strong id="metricSlope">--</strong>
+                    <small>derivada de imagen</small>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">Riesgo hidr&aacute;ulico</span>
+                    <strong id="metricRisk">--</strong>
+                    <small>pendiente y presi&oacute;n</small>
+                </article>
+                <article class="metric-card">
+                    <span class="metric-label">Recomendaci&oacute;n</span>
+                    <strong id="metricRecommendation">Pendiente</strong>
+                    <small>esperando an&aacute;lisis</small>
+                </article>
+                        </div>
+
+            <div class="dashboard-grid">
+                <article class="panel panel-large">
+                    <div class="panel-header">
+                        <h2>Flujo de an&aacute;lisis</h2>
+                        <span class="pill success" id="flowState">Listo</span>
                     </div>
-
-                    <!-- Stats Cards -->
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-icon">📸</div>
-                            <div class="stat-content">
-                                <div class="stat-label">Última imagen analizada</div>
-                                <div class="stat-value">-</div>
-                                <div class="stat-date">Sin análisis</div>
-                            </div>
-                        </div>
-
-                        <div class="stat-card">
-                            <div class="stat-icon">⚠️</div>
-                            <div class="stat-content">
-                                <div class="stat-label">Pendiente detectada</div>
-                                <div class="stat-value">-</div>
-                                <div class="stat-date">Pendiente de datos</div>
-                            </div>
-                        </div>
-
-                        <div class="stat-card">
-                            <div class="stat-icon">💡</div>
-                            <div class="stat-content">
-                                <div class="stat-label">Recomendación principal</div>
-                                <div class="stat-value">-</div>
-                                <div class="stat-date">Por generar</div>
-                            </div>
-                        </div>
-
-                        <div class="stat-card">
-                            <div class="stat-icon">✅</div>
-                            <div class="stat-content">
-                                <div class="stat-label">Estado del sistema</div>
-                                <div class="stat-value system-status">Listo</div>
-                                <div class="stat-date">Operativo</div>
-                            </div>
-                        </div>
+                    <div class="timeline">
+                        <div class="timeline-step is-ready"><span>01</span><strong>Carga</strong><small>GeoTIFF, TIFF</small></div>
+                        <div class="timeline-step"><span>02</span><strong>Terreno</strong><small>pendiente, elevaci&oacute;n y zonas cr&iacute;ticas</small></div>
+                        <div class="timeline-step"><span>03</span><strong>Hidr&aacute;ulica</strong><small>presi&oacute;n, caudal y p&eacute;rdida</small></div>
+                        <div class="timeline-step"><span>04</span><strong>Recomendaci&oacute;n</strong><small>materiales y criterios de dise&ntilde;o</small></div>
                     </div>
-
-                    <!-- Upload Block -->
-                    <div class="upload-block">
-                        <div class="upload-block-content">
-                            <div class="upload-block-icon">📤</div>
-                            <h3>Subir Nueva Imagen</h3>
-                            <p>Carga una fotografía o GeoTIFF de tu terreno para que el sistema analice automáticamente la topografía, calcule presiones, evalúe materiales y genere una recomendación técnica personalizada.</p>
-                            <button class="btn btn-primary btn-large" onclick="openUploadModal()">
-                                <span class="btn-icon">📤</span>
-                                <span>Iniciar Análisis</span>
-                            </button>
-                        </div>
+                </article>
+                <article class="panel">
+                    <div class="panel-header">
+                        <h2>Estado API</h2>
+                        <span class="pill" id="statusBadge">Verificando</span>
                     </div>
+                    <div class="system-readout">
+                        <div><span>Base URL</span><strong>localhost:5000</strong></div>
+                        <div><span>Versi&oacute;n</span><strong id="infoVersion">--</strong></div>
+                        <div><span>&Uacute;ltima lectura</span><strong id="infoTime">--</strong></div>
+                    </div>
+                    <p class="error-text" id="errorText"></p>
+                </article>
+            </div>
+        </section>
+
+        <section id="terreno-tab" class="tab-content">
+            <div class="section-heading compact">
+                <div>
+                    <p class="eyebrow">DEM</p>
+                    <h1>An&aacute;lisis Terreno</h1>
+                    <p>Par&aacute;metros morfom&eacute;tricos obtenidos desde la imagen cargada.</p>
                 </div>
             </div>
-
-            <!-- Terreno Tab -->
-            <div id="terreno-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>📍 Análisis del Terreno</h2>
+            <div class="metric-grid">
+                <article class="metric-card"><span class="metric-label">Elevaci&oacute;n m&aacute;xima</span><strong id="terrainMax">--</strong><small>m.s.n.m.</small></article>
+                <article class="metric-card"><span class="metric-label">Elevaci&oacute;n m&iacute;nima</span><strong id="terrainMin">--</strong><small>m.s.n.m.</small></article>
+                <article class="metric-card"><span class="metric-label">Pendiente media</span><strong id="terrainSlope">--</strong><small>porcentaje</small></article>
+                <article class="metric-card"><span class="metric-label">Zonas cr&iacute;ticas</span><strong id="terrainCritical">--</strong><small>&aacute;reas de variaci&oacute;n</small></article>
+            </div>
+            <div class="dashboard-grid two-columns">
+                <article class="panel">
+                    <div class="panel-header"><h2>Perfil de elevaci&oacute;n</h2><span class="accent purple"></span></div>
+                    <div class="chart-empty" id="elevationProfileState">
+                        <strong>Sin perfil disponible</strong>
+                        <span>El an&aacute;lisis actual entrega elevaci&oacute;n m&aacute;xima, m&iacute;nima y desnivel, pero no una serie de puntos para graficar.</span>
                     </div>
-                    <div class="card-body">
-                        <div class="analysis-section">
-                            <h3>Parámetros Detectados</h3>
-                            <div class="params-grid">
-                                <div class="param-item">
-                                    <span class="param-label">Pendiente Promedio</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Elevación Máxima</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Elevación Mínima</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Zonas Críticas</span>
-                                    <span class="param-value">-</span>
-                                </div>
+                </article>
+                <article class="panel">
+                    <div class="panel-header"><h2>Distribuci&oacute;n de pendientes</h2><span class="accent orange"></span></div>
+                    <div class="chart-empty" id="slopeDistributionState">
+                        <strong>Sin distribuci&oacute;n disponible</strong>
+                        <span>El an&aacute;lisis actual entrega la pendiente media y zonas cr&iacute;ticas, pero no frecuencias por rango.</span>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section id="hidraulica-tab" class="tab-content">
+            <div class="section-heading compact">
+                <div>
+                    <p class="eyebrow">HID</p>
+                    <h1>An&aacute;lisis Hidr&aacute;ulico</h1>
+                    <p>Estimaci&oacute;n de presiones, caudal y p&eacute;rdidas asociadas al terreno.</p>
+                </div>
+            </div>
+            <div class="metric-grid">
+                <article class="metric-card"><span class="metric-label">Presi&oacute;n fuente</span><strong id="hydPressure">--</strong><small>kPa</small></article>
+                <article class="metric-card"><span class="metric-label">Caudal disponible</span><strong id="hydFlow">--</strong><small>L/min</small></article>
+                <article class="metric-card"><span class="metric-label">P&eacute;rdida de carga</span><strong id="hydLoss">--</strong><small>kPa</small></article>
+                <article class="metric-card"><span class="metric-label">Riesgo</span><strong id="hydRisk">--</strong><small>clasificaci&oacute;n</small></article>
+                    </div>
+        </section>
+
+        <section id="agua-tab" class="tab-content">
+            <div class="section-heading compact">
+                <div>
+                    <p class="eyebrow">MAT</p>
+                    <h1>Agua y Materiales</h1>
+                    <p>Compatibilidad de materiales y calidad estimada del agua.</p>
+                </div>
+            </div>
+            <div class="metric-grid">
+                <article class="metric-card"><span class="metric-label">pH</span><strong id="waterPh">--</strong><small>estimado</small></article>
+                <article class="metric-card"><span class="metric-label">Salinidad</span><strong id="waterSalinity">--</strong><small>ppm</small></article>
+                <article class="metric-card"><span class="metric-label">Dureza</span><strong id="waterHardness">--</strong><small>mg/L</small></article>
+                <article class="metric-card"><span class="metric-label">Calidad</span><strong id="waterQuality">--</strong><small>clase</small></article>
+                    </div>
+            <article class="panel">
+                <div class="panel-header"><h2>Material recomendado</h2><span class="pill" id="materialStatus">Pendiente</span></div>
+                <p class="panel-copy" id="materialRecommendation">Carga una imagen para generar la recomendaci&oacute;n de material.</p>
+            </article>
+        </section>
+
+        <section id="diseno-tab" class="tab-content">
+            <div class="section-heading compact">
+                <div>
+                    <p class="eyebrow">REC</p>
+                    <h1>Recomendaci&oacute;n T&eacute;cnica</h1>
+                    <p>Resumen de criterios para dise&ntilde;o y compra de componentes.</p>
+                </div>
+            </div>
+            <div class="metric-grid">
+                <article class="metric-card"><span class="metric-label">&Aacute;rea estimada</span><strong id="designArea">--</strong><small>ha</small></article>
+                <article class="metric-card"><span class="metric-label">Longitud riego</span><strong id="designLength">--</strong><small>m</small></article>
+                <article class="metric-card"><span class="metric-label">Complejidad</span><strong id="designComplexity">--</strong><small>nivel</small></article>
+                <article class="metric-card"><span class="metric-label">Costo estimado</span><strong id="designCost">--</strong><small>nivel</small></article>
                             </div>
+            <article class="panel">
+                <div class="panel-header"><h2>Acciones recomendadas</h2><span class="accent green"></span></div>
+                <div class="recommendation-list" id="recommendationList">
+                    <p class="empty-state">No hay recomendaciones disponibles todav&iacute;a.</p>
                         </div>
-                    </div>
-                </div>
-            </div>
+            </article>
+        </section>
 
-            <!-- Hidráulica Tab -->
-            <div id="hidraulica-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>💧 Análisis Hidráulico</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="analysis-section">
-                            <h3>Parámetros Calculados</h3>
-                            <div class="params-grid">
-                                <div class="param-item">
-                                    <span class="param-label">Presión en Fuente</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Caudal Disponible</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Pérdida de Carga</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Riesgo Hidráulico</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Agua Tab -->
-            <div id="agua-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>⚗️ Análisis de Agua y Materiales</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="analysis-section">
-                            <h3>Composición del Agua</h3>
-                            <div class="params-grid">
-                                <div class="param-item">
-                                    <span class="param-label">pH</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Dureza (CaCO3)</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Conductividad</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Compatibilidad</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Diseño Tab -->
-            <div id="diseno-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>⚙️ Recomendaciones de Diseño</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="analysis-section">
-                            <h3>Especificaciones Técnicas</h3>
-                            <div class="params-grid">
-                                <div class="param-item">
-                                    <span class="param-label">Tipo de Motobomba</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Diámetro de Tubería</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Material Recomendado</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                                <div class="param-item">
-                                    <span class="param-label">Observaciones</span>
-                                    <span class="param-value">-</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Reporte Tab -->
-            <div id="resultados-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>📋 Reporte de Análisis</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="analysis-section">
-                            <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;">
-                                No hay análisis disponibles. 
-                                <a href="#" onclick="openUploadModal(); return false;" style="color: var(--primary-color); text-decoration: underline;">
-                                    Inicia un nuevo análisis
-                                </a>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Historial Tab -->
-            <div id="historial-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>📜 Historial de Análisis</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="analysis-section">
-                            <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;">
-                                El historial de análisis aparecerá aquí.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- API / Sistema Tab -->
-            <div id="api-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>🔧 API de Sistema de Recomendación</h2>
-                        <span class="status-badge success">Disponible</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="api-description">
-                            <h3>Acerca de esta API</h3>
-                            <p>
-                                Este es un servicio RESTful diseñado para realizar análisis multiparamétricos de redes de riego por goteo. 
-                                La API integra tres módulos especializados que trabajan conjuntamente para proporcionar recomendaciones técnicas completas 
-                                y fundamentadas en datos geoespaciales y parámetros hidráulicos reales.
-                            </p>
-                            
-                            <h3 style="margin-top: 20px;">Módulos de Análisis</h3>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
-                                <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid var(--primary-color); padding: 15px; border-radius: 6px;">
-                                    <strong style="color: var(--primary-color);">🗺️ Geoespacial</strong>
-                                    <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px;">Análisis de terreno mediante DEM, pendientes y detección de zonas críticas para riego.</p>
-                                </div>
-                                <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid var(--primary-color); padding: 15px; border-radius: 6px;">
-                                    <strong style="color: var(--primary-color);">💧 Hidráulico</strong>
-                                    <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px;">Cálculos de presión, caudal y pérdidas de carga usando métodos Hazen-Williams y energía.</p>
-                                </div>
-                                <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid var(--primary-color); padding: 15px; border-radius: 6px;">
-                                    <strong style="color: var(--primary-color);">⚗️ Recomendación</strong>
-                                    <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px;">Motor de decisión inteligente que genera especificaciones de motobomba, tuberías y materiales.</p>
-                                </div>
-                            </div>
-
-                            <h3 style="margin-top: 25px;">Endpoints Disponibles</h3>
-                            <p style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px;">
-                                Accede a estos puntos de entrada para consultar la documentación, verificar el estado del sistema 
-                                y procesar análisis completos de tu infraestructura de riego.
-                            </p>
-                        </div>
-
-                        <div class="endpoints-list" style="margin-top: 25px;">
-                            <div class="endpoint-item">
-                                <span class="endpoint-method get">GET</span>
+        <section id="resultados-tab" class="tab-content">
+            <div class="section-heading compact">
                                 <div>
-                                    <span class="endpoint-path">/api/v1/health</span>
-                                    <p class="endpoint-desc">Verifica el estado actual del servidor y la disponibilidad de la API</p>
-                                </div>
-                            </div>
-                            <div class="endpoint-item">
-                                <span class="endpoint-method get">GET</span>
-                                <div>
-                                    <span class="endpoint-path">/api/v1/docs</span>
-                                    <p class="endpoint-desc">Obtiene la documentación completa en formato JSON con descripciones de todos los endpoints</p>
-                                </div>
-                            </div>
-                            <div class="endpoint-item">
-                                <span class="endpoint-method post">POST</span>
-                                <div>
-                                    <span class="endpoint-path">/api/v1/analysis/elevation</span>
-                                    <p class="endpoint-desc">Realiza análisis geoespacial: pendientes, elevaciones y zonas críticas a partir de una imagen DEM</p>
-                                </div>
-                            </div>
-                            <div class="endpoint-item">
-                                <span class="endpoint-method post">POST</span>
-                                <div>
-                                    <span class="endpoint-path">/api/v1/analysis/hydraulic</span>
-                                    <p class="endpoint-desc">Calcula parámetros hidráulicos: presiones, caudales y pérdidas basado en datos de fuente y terreno</p>
-                                </div>
-                            </div>
-                            <div class="endpoint-item">
-                                <span class="endpoint-method post">POST</span>
-                                <div>
-                                    <span class="endpoint-path">/api/v1/recommendations</span>
-                                    <p class="endpoint-desc">Genera recomendaciones técnicas completas: especificaciones de bomba, tuberías y observaciones de diseño</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div style="margin-top: 25px; padding: 20px; background: rgba(46, 204, 113, 0.1); border-left: 4px solid var(--secondary-color); border-radius: 8px;">
-                            <strong style="color: var(--secondary-color);">ℹ️ Información del Sistema</strong>
-                            <div style="margin-top: 12px; font-size: 0.9em; color: var(--text-secondary);">
-                                <p><strong>URL Base:</strong> http://localhost:5000</p>
-                                <p><strong>Versión API:</strong> 1.0</p>
-                                <p><strong>Formato:</strong> JSON</p>
-                                <p><strong>Autenticación:</strong> No requerida</p>
-                            </div>
-                        </div>
-                    </div>
+                    <p class="eyebrow">REP</p>
+                    <h1>Reporte de An&aacute;lisis</h1>
+                    <p>Salida consolidada del &uacute;ltimo procesamiento.</p>
                 </div>
             </div>
-
-            <!-- Acerca Tab -->
-            <div id="acerca-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>ℹ️ Acerca del Proyecto</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="analysis-section">
-                            <h3>Sistema de Recomendación para Redes de Riego por Goteo</h3>
-                            <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 20px;">
-                                Este proyecto es una herramienta desarrollada como seminario de tesis que integra análisis geoespaciales, 
-                                cálculos hidráulicos y un motor de recomendación inteligente para diseñar redes de riego por goteo optimizadas 
-                                basadas en parámetros reales del terreno y del agua disponible.
-                            </p>
-
-                            <h3 style="margin-top: 20px;">Características Principales</h3>
-                            <ul style="color: var(--text-secondary); margin: 15px 0; padding-left: 20px;">
-                                <li style="margin: 10px 0;">🗺️ <strong>Análisis Geoespacial:</strong> Procesa modelos de elevación digital para detectar pendientes y zonas críticas</li>
-                                <li style="margin: 10px 0;">💧 <strong>Cálculos Hidráulicos:</strong> Determina presiones, caudales y pérdidas de carga usando métodos reconocidos</li>
-                                <li style="margin: 10px 0;">⚗️ <strong>Análisis de Agua:</strong> Evalúa compatibilidad del agua con materiales de conducción</li>
-                                <li style="margin: 10px 0;">⚙️ <strong>Recomendaciones Técnicas:</strong> Genera especificaciones de bomba, tuberías y materiales</li>
-                                <li style="margin: 10px 0;">📊 <strong>Reportes Detallados:</strong> Proporciona documentación completa del diseño recomendado</li>
-                            </ul>
-
-                            <h3 style="margin-top: 20px;">Información de la Institución</h3>
-                            <div style="background: rgba(0, 217, 255, 0.05); border-left: 4px solid var(--primary-color); padding: 15px; border-radius: 8px; margin-top: 15px;">
-                                <p style="color: var(--text-secondary);"><strong>Universidad:</strong> Universidad de Santiago de Chile (USACH)</p>
-                                <p style="color: var(--text-secondary); margin-top: 8px;"><strong>Departamento:</strong> Ingeniería Informática</p>
-                                <p style="color: var(--text-secondary); margin-top: 8px;"><strong>Asignatura:</strong> Seminario 2026</p>
-                                <p style="color: var(--text-secondary); margin-top: 8px;"><strong>Alumno:</strong> Luis González</p>
-                                <p style="color: var(--text-secondary); margin-top: 8px;"><strong>Profesor Guía:</strong> Arturo Álvarez</p>
+            <article class="panel">
+                <div class="panel-header"><h2>Resumen</h2><span class="pill" id="reportState">Sin reporte</span></div>
+                <div id="reportContent" class="report-content">
+                    <p class="empty-state">Sube una imagen para generar el reporte del an&aacute;lisis.</p>
                             </div>
+            </article>
+        </section>
 
-                            <h3 style="margin-top: 20px;">Tecnología Utilizada</h3>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 15px;">
-                                <div style="background: rgba(46, 204, 113, 0.1); padding: 12px; border-radius: 6px; text-align: center; color: var(--text-secondary);">
-                                    <strong>Backend</strong><br>
-                                    <span style="font-size: 0.9em; margin-top: 5px; display: block;">Python + Flask</span>
-                                </div>
-                                <div style="background: rgba(52, 152, 219, 0.1); padding: 12px; border-radius: 6px; text-align: center; color: var(--text-secondary);">
-                                    <strong>Frontend</strong><br>
-                                    <span style="font-size: 0.9em; margin-top: 5px; display: block;">HTML5 + CSS3 + JS</span>
-                                </div>
-                                <div style="background: rgba(155, 89, 182, 0.1); padding: 12px; border-radius: 6px; text-align: center; color: var(--text-secondary);">
-                                    <strong>Análisis</strong><br>
-                                    <span style="font-size: 0.9em; margin-top: 5px; display: block;">NumPy + SciPy</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        <section id="api-tab" class="tab-content">
+            <div class="section-heading compact">
+                <div>
+                    <p class="eyebrow">API</p>
+                    <h1>Sistema</h1>
+                    <p>Servicios disponibles para ejecutar an&aacute;lisis y recomendaciones.</p>
                 </div>
             </div>
-
-            <!-- Footer Info -->
-            <div class="info-footer">
-                <p>
-                    <strong>Universidad de Santiago de Chile</strong> | 
-                    Departamento de Ingeniería Informática | 
-                    Seminario 2026
-                </p>
-                <p>
-                    Alumno: Luis González | 
-                    Profesor Guía: Arturo Álvarez
-                </p>
+            <article class="panel">
+                <div class="endpoint-list">
+                    <div><span class="method get">GET</span><strong>/api/v1/health</strong><small>Estado del servidor</small></div>
+                    <div><span class="method get">GET</span><strong>/api/v1/docs</strong><small>Documentaci&oacute;n JSON</small></div>
+                    <div><span class="method post">POST</span><strong>/api/v1/analyze/image</strong><small>An&aacute;lisis completo desde imagen</small></div>
+                    <div><span class="method post">POST</span><strong>/api/v1/analysis/elevation</strong><small>An&aacute;lisis de puntos geogr&aacute;ficos</small></div>
+                    <div><span class="method post">POST</span><strong>/api/v1/recommendations</strong><small>Recomendaciones t&eacute;cnicas</small></div>
             </div>
+            </article>
+        </section>
         </main>
-    </div>
 
-    <!-- Modal de Carga de Archivo -->
-    <div id="uploadModal" class="modal">
-        <div class="modal-content">
+    <footer class="bottom-status">
+        <span>M&oacute;dulo: <strong id="footerModule">Inicio</strong></span>
+        <span>Convergencia: <strong id="footerProgress">--</strong></span>
+        <span>USACH | T&eacute;sis 2026</span>
+    </footer>
+
+    <div id="uploadModal" class="modal" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
             <div class="modal-header">
-                <h2>📤 Nuevo Análisis - Cargar Imagen</h2>
-                <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+                <h2 id="uploadTitle">Nuevo an&aacute;lisis</h2>
+                <button class="modal-close" onclick="closeUploadModal()" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-                    <div class="upload-icon">📁</div>
-                    <h3>Selecciona tu archivo</h3>
-                    <p>Haz click aquí o arrastra un archivo</p>
-                    <p style="font-size: 0.85em; margin-top: 10px; color: var(--text-secondary);">
-                        Formatos aceptados: GeoTIFF, TIFF.
-                    </p>
-                </div>
+                <button class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <span class="upload-symbol">+</span>
+                    <strong>Selecciona una imagen territorial</strong>
+                    <small>GeoTIFF, TIFF</small>
+                </button>
                 <input 
                     type="file" 
                     id="fileInput" 
-                    style="display: none;"
-                    accept=".tif,.tiff,.geotiff,.jpg,.jpeg,.png"
+                    accept=".tiff,.geotiff"
                     onchange="handleFileSelect(event)"
                 >
-                
-                <div id="filePreview" style="margin-top: 20px; display: none;">
-                    <h4 style="color: var(--primary-color); margin-bottom: 10px;">Archivo seleccionado:</h4>
-                    <div id="selectedFileInfo" style="background: rgba(0, 217, 255, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid var(--primary-color);"></div>
+                <div id="filePreview" class="file-preview">
+                    <span>Archivo seleccionado</span>
+                    <strong id="selectedFileInfo">--</strong>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeUploadModal()">Cancelar</button>
-                <button class="btn btn-primary" id="submitBtn" onclick="submitAnalysis()" style="display: none;">
-                    <span class="btn-icon">✓</span> Iniciar Análisis
-                </button>
+                <button class="btn btn-primary" id="submitBtn" onclick="submitAnalysis()">Iniciar an&aacute;lisis</button>
             </div>
         </div>
     </div>
@@ -522,7 +356,7 @@
         // Sincronizar menú y tabs al cargar
         window.addEventListener('load', function() {
             switchTab('inicio');
-            setTimeout(checkHealth, 500);
+            checkHealth();
         });
 
         // Auto refresh cada 30 segundos

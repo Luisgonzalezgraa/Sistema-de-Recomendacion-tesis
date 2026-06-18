@@ -3,6 +3,9 @@ Configuration settings for the Irrigation Network Recommendation System API
 """
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
 class Config:
     """Base configuration"""
