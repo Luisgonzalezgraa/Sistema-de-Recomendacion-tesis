@@ -331,6 +331,39 @@ class RecommendationEndpoint(Resource):
 
 class ImageAnalysisEndpoint(Resource):
     """Image analysis endpoint - processes geospatial images (TIFF, GeoTIFF, etc.)"""
+
+    PUMP_CATALOG = [
+        {
+            'model': 'Honda WB20',
+            'type': 'Centrifuga 2 pulg.',
+            'engine': 'GX120',
+            'engine_power_hp': 3.5,
+            'max_flow_l_min': 621,
+            'max_head_m': 32.0,
+            'max_pressure_kpa': 310,
+            'source': 'Honda Power Equipment WB20'
+        },
+        {
+            'model': 'Honda WB30',
+            'type': 'Centrifuga 3 pulg.',
+            'engine': 'GX160',
+            'engine_power_hp': 4.8,
+            'max_flow_l_min': 1098,
+            'max_head_m': 25.9,
+            'max_pressure_kpa': 255,
+            'source': 'Honda Power Equipment WB30'
+        },
+        {
+            'model': 'Honda WH20',
+            'type': 'Alta presion 2 pulg.',
+            'engine': 'GX160',
+            'engine_power_hp': 4.8,
+            'max_flow_l_min': 450,
+            'max_head_m': 45.1,
+            'max_pressure_kpa': 441,
+            'source': 'Honda Power Equipment WH20'
+        }
+    ]
     
     def __init__(self):
         self.geospatial = GeospatialAnalyzer()
@@ -430,6 +463,14 @@ class ImageAnalysisEndpoint(Resource):
             source_pixel_size_x,
             source_pixel_size_y
         )
+        terrain_limits = self._build_terrain_limits(
+            dem_data,
+            source_width,
+            source_height,
+            source_pixel_size_x,
+            source_pixel_size_y,
+            source_area
+        )
 
         if dem_data.get('array') is None:
             dem_data = self._build_dem_from_google(dem_data)
@@ -450,22 +491,34 @@ class ImageAnalysisEndpoint(Resource):
 
         pixel_size_x, pixel_size_y = self._pixel_size_meters(dem_data)
         slope_percentage = None
+        slope_degrees = None
+        slope_ratio = None
         critical_zones_percentage = None
+        slope_values = np.array([])
 
         if pixel_size_x and pixel_size_y:
             elevation_for_gradient = elevation.copy()
             if not np.isfinite(elevation_for_gradient).all():
                 elevation_for_gradient[~np.isfinite(elevation_for_gradient)] = median_elev
             gradient_y, gradient_x = np.gradient(elevation_for_gradient, pixel_size_y, pixel_size_x)
-            slope = np.sqrt(gradient_x ** 2 + gradient_y ** 2) * 100
+            slope_ratio_values = np.sqrt(gradient_x ** 2 + gradient_y ** 2)
+            slope = slope_ratio_values * 100
+            slope_degrees_values = np.degrees(np.arctan(slope_ratio_values))
             slope_values = slope[np.isfinite(slope)]
+            valid_degree_values = slope_degrees_values[np.isfinite(slope_degrees_values)]
+            valid_ratio_values = slope_ratio_values[np.isfinite(slope_ratio_values)]
             if slope_values.size:
                 slope_percentage = float(np.mean(slope_values))
+                slope_degrees = float(np.mean(valid_degree_values))
+                slope_ratio = float(np.mean(valid_ratio_values))
                 p75 = float(np.percentile(slope_values, 75))
                 critical_zones_percentage = float(np.mean(slope_values >= p75) * 100)
 
         terrain_analysis = {
             'slope_percentage': round(slope_percentage, 2) if slope_percentage is not None else None,
+            'slope_degrees': round(slope_degrees, 2) if slope_degrees is not None else None,
+            'slope_ratio': round(slope_ratio, 4) if slope_ratio is not None else None,
+            'slope_mean_definition': 'Media aritmetica del angulo de pendiente por celda DEM: atan(sqrt((dz/dx)^2 + (dz/dy)^2)).',
             'max_elevation': round(max_elev, 2),
             'min_elevation': round(min_elev, 2),
             'median_elevation': round(median_elev, 2),
@@ -475,6 +528,9 @@ class ImageAnalysisEndpoint(Resource):
             'sample_points': dem_data.get('sample_points'),
             'pixel_size_x_m': round(pixel_size_x, 3) if pixel_size_x else None,
             'pixel_size_y_m': round(pixel_size_y, 3) if pixel_size_y else None,
+            'elevation_profile': self._build_elevation_profile(elevation, pixel_size_x),
+            'slope_distribution': self._build_slope_distribution(slope_values),
+            'terrain_limits': terrain_limits,
             'crs': dem_data.get('crs'),
             'transform': dem_data.get('transform')
         }
@@ -497,14 +553,14 @@ class ImageAnalysisEndpoint(Resource):
             recommendations = [{
                 'priority': 'Medio',
                 'type': 'Pendiente',
-                'message': f'Pendiente media: {slope_percentage:.2f}%. El informe recomienda separar zonas y controlar presion en terrenos con desnivel relevante.',
+                'message': f'Pendiente media: {slope_degrees:.2f} grados. El informe recomienda separar zonas y controlar presion en terrenos con desnivel relevante.',
                 'action': 'Validar sectores de riego, reguladores de presion y diferencia de carga por elevacion.'
             }]
         else:
             recommendations = [{
                 'priority': 'Bajo',
                 'type': 'Pendiente',
-                'message': f'Pendiente media: {slope_percentage:.2f}%. El terreno no muestra una restriccion topografica severa para el diseno preliminar.',
+                'message': f'Pendiente media: {slope_degrees:.2f} grados. El terreno no muestra una restriccion topografica severa para el diseno preliminar.',
                 'action': 'Continuar con calculo hidraulico usando caudal, diametro, longitud y presion disponible.'
             }]
 
@@ -518,6 +574,7 @@ class ImageAnalysisEndpoint(Resource):
             'recommendations': recommendations,
             'estimated_area': source_area,
             'estimated_drip_length': estimated_drip_length,
+            'pump_surface_limit': hydraulic_analysis.get('recommended_pump', {}).get('max_surface_ha'),
             'complexity_level': self._classify_design_complexity(
                 slope_percentage,
                 source_area,
@@ -615,10 +672,65 @@ class ImageAnalysisEndpoint(Resource):
                 "o una ortofoto GeoTIFF georreferenciada para consultar Google Elevation API."
             ) from e
 
+    def _build_elevation_profile(self, elevation, pixel_size_x):
+        import numpy as np
+
+        if elevation.size == 0:
+            return []
+
+        center_row = elevation[elevation.shape[0] // 2, :]
+        valid_indexes = np.where(np.isfinite(center_row))[0]
+        if valid_indexes.size == 0:
+            return []
+
+        max_points = 18
+        selected = valid_indexes
+        if valid_indexes.size > max_points:
+            selected = valid_indexes[np.linspace(0, valid_indexes.size - 1, max_points).astype(int)]
+
+        spacing = pixel_size_x if pixel_size_x else 1
+        return [
+            {
+                'distance_m': round(float(index * spacing), 2),
+                'elevation_m': round(float(center_row[index]), 2)
+            }
+            for index in selected
+        ]
+
+    def _build_slope_distribution(self, slope_values):
+        import numpy as np
+
+        if slope_values is None or slope_values.size == 0:
+            return []
+
+        bins = [
+            ('0-2', 0, 2),
+            ('2-5', 2, 5),
+            ('5-10', 5, 10),
+            ('10-15', 10, 15),
+            ('15-25', 15, 25),
+            ('>25', 25, np.inf)
+        ]
+        total = slope_values.size
+        distribution = []
+        for label, lower, upper in bins:
+            if np.isinf(upper):
+                mask = slope_values >= lower
+            else:
+                mask = (slope_values >= lower) & (slope_values < upper)
+            count = int(np.sum(mask))
+            distribution.append({
+                'range': label,
+                'count': count,
+                'percentage': round(float((count / total) * 100), 2)
+            })
+        return distribution
+
     def _build_preliminary_hydraulic_analysis(self, slope_percentage, elevation_diff, area_hectares):
         initial_pressure_kpa = 150.0
         area = area_hectares if area_hectares and area_hectares > 0 else 1.0
         design_sector_ha = min(area, 3.0)
+        flow_per_hectare_l_min = 35.0
         available_flow_l_min = max(20.0, design_sector_ha * 35.0)
         flow_m3_s = available_flow_l_min / 60000
         pipe_length_m = max(80.0, (design_sector_ha * 10000) ** 0.5 * 1.25)
@@ -634,6 +746,21 @@ class ImageAnalysisEndpoint(Resource):
         friction_loss_kpa = friction_loss_bar * 100
         total_pressure_loss_kpa = friction_loss_kpa + elevation_pressure_kpa
         final_pressure_kpa = initial_pressure_kpa - total_pressure_loss_kpa
+        required_total_pressure_kpa = initial_pressure_kpa + total_pressure_loss_kpa
+        required_total_head_m = required_total_pressure_kpa / 9.81
+        required_pump_power_hp = self._required_pump_power_hp(
+            flow_l_min=available_flow_l_min,
+            total_head_m=required_total_head_m
+        )
+        pump_catalog = self._evaluate_pump_catalog(
+            required_total_head_m=required_total_head_m,
+            required_total_pressure_kpa=required_total_pressure_kpa,
+            flow_per_hectare_l_min=flow_per_hectare_l_min
+        )
+        recommended_pump = next(
+            (pump for pump in pump_catalog if pump['suitable_for_required_head']),
+            pump_catalog[-1] if pump_catalog else None
+        )
 
         if final_pressure_kpa < 70 or total_pressure_loss_kpa > 80 or (slope_percentage or 0) > 20:
             risk = 'Alto'
@@ -645,16 +772,48 @@ class ImageAnalysisEndpoint(Resource):
         return {
             'source_pressure': round(initial_pressure_kpa, 2),
             'available_flow': round(available_flow_l_min, 2),
+            'flow_per_hectare': round(flow_per_hectare_l_min, 2),
             'pressure_loss': round(total_pressure_loss_kpa, 2),
             'final_pressure': round(final_pressure_kpa, 2),
+            'required_total_pressure': round(required_total_pressure_kpa, 2),
+            'required_total_head': round(required_total_head_m, 2),
+            'required_pump_power': round(required_pump_power_hp, 2),
             'hydraulic_risk': risk,
             'pipe_diameter': round(pipe_diameter_m * 1000, 0),
             'pipe_length': round(pipe_length_m, 2),
             'design_sector_area': round(design_sector_ha, 2),
             'elevation_pressure_change': round(elevation_pressure_kpa, 2),
             'friction_loss': round(friction_loss_kpa, 2),
-            'calculation_basis': 'Preliminar por sector: desnivel DEM/Google + Hazen-Williams con supuestos de diseno.'
+            'pump_catalog': pump_catalog,
+            'recommended_pump': recommended_pump,
+            'calculation_basis': 'Preliminar por sector: desnivel DEM/Google + Hazen-Williams con supuestos de diseno; bomba evaluada con caudal maximo y altura total de catalogo.'
         }
+
+    def _required_pump_power_hp(self, flow_l_min, total_head_m, efficiency=0.60):
+        flow_m3_s = flow_l_min / 60000
+        watts = 1000 * 9.81 * flow_m3_s * total_head_m / efficiency
+        return watts / 745.7
+
+    def _evaluate_pump_catalog(self, required_total_head_m, required_total_pressure_kpa, flow_per_hectare_l_min):
+        evaluated = []
+        for pump in self.PUMP_CATALOG:
+            max_surface_ha = pump['max_flow_l_min'] / flow_per_hectare_l_min
+            suitable = (
+                pump['max_head_m'] >= required_total_head_m and
+                pump['max_pressure_kpa'] >= required_total_pressure_kpa
+            )
+            item = dict(pump)
+            item.update({
+                'max_surface_ha': round(max_surface_ha, 2),
+                'suitable_for_required_head': suitable,
+                'selection_note': (
+                    'Cumple altura/presion preliminar para el sector analizado.'
+                    if suitable else
+                    'No cumple la altura/presion preliminar requerida para este sector.'
+                )
+            })
+            evaluated.append(item)
+        return sorted(evaluated, key=lambda pump: (not pump['suitable_for_required_head'], pump['engine_power_hp'], pump['max_flow_l_min']))
 
     def _build_reference_water_analysis(self):
         return {
@@ -695,6 +854,35 @@ class ImageAnalysisEndpoint(Resource):
             ),
             'action': f"Material preliminar: {water_analysis['recommended_material']}. Confirmar con analisis de agua real."
         }
+
+    def _build_terrain_limits(self, dem_data, width, height, pixel_size_x, pixel_size_y, area_hectares):
+        limits = {
+            'width_px': int(width),
+            'height_px': int(height),
+            'pixel_size_x_m': round(pixel_size_x, 3) if pixel_size_x else None,
+            'pixel_size_y_m': round(pixel_size_y, 3) if pixel_size_y else None,
+            'area_hectares': area_hectares,
+            'projected_bounds': dem_data.get('bounds'),
+            'geographic_bounds': None,
+            'center': None
+        }
+
+        try:
+            west, south, east, north = self._bounds_wgs84(dem_data)
+            limits['geographic_bounds'] = {
+                'west': round(float(west), 6),
+                'south': round(float(south), 6),
+                'east': round(float(east), 6),
+                'north': round(float(north), 6)
+            }
+            limits['center'] = {
+                'latitude': round(float((north + south) / 2), 6),
+                'longitude': round(float((east + west) / 2), 6)
+            }
+        except ValueError:
+            pass
+
+        return limits
 
     def _estimate_drip_length(self, area_hectares, row_spacing_m=2.0):
         if not area_hectares:

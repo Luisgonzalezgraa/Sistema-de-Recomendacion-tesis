@@ -200,7 +200,7 @@
             <div class="metric-grid">
                 <article class="metric-card"><span class="metric-label">Elevaci&oacute;n m&aacute;xima</span><strong id="terrainMax">--</strong><small>m.s.n.m.</small></article>
                 <article class="metric-card"><span class="metric-label">Elevaci&oacute;n m&iacute;nima</span><strong id="terrainMin">--</strong><small>m.s.n.m.</small></article>
-                <article class="metric-card"><span class="metric-label">Pendiente media</span><strong id="terrainSlope">--</strong><small>porcentaje</small></article>
+                <article class="metric-card"><span class="metric-label">Pendiente media</span><strong id="terrainSlope">--</strong><small>grados</small></article>
                 <article class="metric-card"><span class="metric-label">Zonas cr&iacute;ticas</span><strong id="terrainCritical">--</strong><small>&aacute;reas de variaci&oacute;n</small></article>
             </div>
             <div class="dashboard-grid two-columns">
@@ -234,7 +234,29 @@
                 <article class="metric-card"><span class="metric-label">Caudal disponible</span><strong id="hydFlow">--</strong><small>L/min</small></article>
                 <article class="metric-card"><span class="metric-label">P&eacute;rdida de carga</span><strong id="hydLoss">--</strong><small>kPa</small></article>
                 <article class="metric-card"><span class="metric-label">Riesgo</span><strong id="hydRisk">--</strong><small>clasificaci&oacute;n</small></article>
+                <article class="metric-card"><span class="metric-label">Potencia bomba</span><strong id="hydPumpPower">--</strong><small>HP requeridos</small></article>
+                <article class="metric-card"><span class="metric-label">L&iacute;mite superficie</span><strong id="hydSurfaceLimit">--</strong><small>ha por caudal cat&aacute;logo</small></article>
+            </div>
+            <div class="dashboard-grid two-columns">
+                <article class="panel">
+                    <div class="panel-header"><h2>Balance de presi&oacute;n</h2><span class="accent cyan"></span></div>
+                    <div class="bar-chart" id="hydPressureChart">
+                        <p class="empty-state">Carga datos para visualizar presi&oacute;n y p&eacute;rdidas.</p>
                     </div>
+                </article>
+                <article class="panel">
+                    <div class="panel-header"><h2>Par&aacute;metros de sector</h2><span class="accent orange"></span></div>
+                    <div class="gauge-grid" id="hydSectorChart">
+                        <p class="empty-state">Sin sector hidr&aacute;ulico calculado.</p>
+                    </div>
+                </article>
+            </div>
+            <article class="panel">
+                <div class="panel-header"><h2>Cat&aacute;logo referencial de motobombas</h2><span class="pill" id="pumpStatus">Pendiente</span></div>
+                <div class="pump-catalog" id="pumpCatalog">
+                    <p class="empty-state">Sin evaluaci&oacute;n de motobomba.</p>
+                </div>
+            </article>
         </section>
 
         <section id="agua-tab" class="tab-content">
@@ -246,11 +268,25 @@
                 </div>
             </div>
             <div class="metric-grid">
-                <article class="metric-card"><span class="metric-label">pH</span><strong id="waterPh">--</strong><small>estimado</small></article>
+                <article class="metric-card"><span class="metric-label">pH</span><strong id="waterPh">--</strong><small>medici&oacute;n/referencia</small></article>
                 <article class="metric-card"><span class="metric-label">Salinidad</span><strong id="waterSalinity">--</strong><small>ppm</small></article>
                 <article class="metric-card"><span class="metric-label">Dureza</span><strong id="waterHardness">--</strong><small>mg/L</small></article>
                 <article class="metric-card"><span class="metric-label">Calidad</span><strong id="waterQuality">--</strong><small>clase</small></article>
+            </div>
+            <div class="dashboard-grid two-columns">
+                <article class="panel">
+                    <div class="panel-header"><h2>Qu&iacute;mica del agua</h2><span class="accent cyan"></span></div>
+                    <div class="bar-chart" id="waterChemistryChart">
+                        <p class="empty-state">Sin par&aacute;metros de agua disponibles.</p>
                     </div>
+                </article>
+                <article class="panel">
+                    <div class="panel-header"><h2>Compatibilidad de materiales</h2><span class="accent purple"></span></div>
+                    <div class="compat-grid" id="materialCompatibilityChart">
+                        <p class="empty-state">Sin compatibilidad calculada.</p>
+                    </div>
+                </article>
+            </div>
             <article class="panel">
                 <div class="panel-header"><h2>Material recomendado</h2><span class="pill" id="materialStatus">Pendiente</span></div>
                 <p class="panel-copy" id="materialRecommendation">Carga una imagen para generar la recomendaci&oacute;n de material.</p>

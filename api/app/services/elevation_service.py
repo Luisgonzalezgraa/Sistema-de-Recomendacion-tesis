@@ -24,6 +24,8 @@ class GoogleElevationService:
         self.base_url = 'https://maps.googleapis.com/maps/api/elevation/json'
         self.logger = logger
         self.request_timeout = 10  # seconds
+        self.session = requests.Session()
+        self.session.trust_env = False
     
     def get_elevation(
         self,
@@ -46,7 +48,7 @@ class GoogleElevationService:
                 'key': self.api_key
             }
             
-            response = requests.get(
+            response = self.session.get(
                 self.base_url,
                 params=params,
                 timeout=self.request_timeout
@@ -105,7 +107,7 @@ class GoogleElevationService:
                 'key': self.api_key
             }
             
-            response = requests.get(
+            response = self.session.get(
                 self.base_url,
                 params=params,
                 timeout=self.request_timeout
@@ -192,7 +194,7 @@ class GoogleElevationService:
                 'key': self.api_key
             }
             
-            response = requests.get(
+            response = self.session.get(
                 self.base_url,
                 params=params,
                 timeout=self.request_timeout
