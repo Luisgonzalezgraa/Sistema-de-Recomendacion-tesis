@@ -2,11 +2,73 @@ const API_URL = "http://localhost:5000";
 const HEALTH_ENDPOINT = "/api/v1/health";
 const DOCS_ENDPOINT = "/api/v1/docs";
 
+const DEFAULT_HYDRAULIC_ASSUMPTIONS = {
+    flow_per_hectare_l_min: 35,
+    emitter_operating_pressure_kpa: 100,
+    pressure_safety_factor: 1.2,
+    pump_efficiency: 0.6,
+    max_sector_area_ha: 3,
+    minimum_flow_l_min: 20,
+    hazen_williams_c: 150,
+    pipe_diameter_large_m: 0.04,
+    pipe_diameter_small_m: 0.032,
+    minimum_pipe_length_m: 80,
+    pipe_length_factor: 1.25
+};
+
+let hydraulicAssumptions = { ...DEFAULT_HYDRAULIC_ASSUMPTIONS };
+let activeMetricInfo = null;
+let currentPumpEvaluation = null;
+let currentMaterials = null;
+
+const MATERIAL_POPUPS = {
+    main_pipe: {
+        title: "Tuberia principal",
+        photoClass: "main-pipe",
+        copy: "Alternativas para conducir el caudal desde la fuente o motobomba hasta el sector de riego.",
+        options: [
+            { name: "HDPE para matriz principal", spec: "Recomendado para enterrado o trazados largos; flexible y resistente.", use: "Usar con la clase de presion calculada y diametro del sector." },
+            { name: "PVC hidraulico presion", spec: "Alternativa rigida para tramos rectos y cabezales protegidos del sol.", use: "Cuidar proteccion UV y uniones correctamente cementadas." },
+            { name: "PE agricola reforzado", spec: "Opcion flexible para conduccion secundaria de bajo a medio requerimiento.", use: "Validar presion nominal antes de comprar." }
+        ]
+    },
+    laterals: {
+        title: "Laterales de goteo",
+        photoClass: "laterals",
+        copy: "Lineas que distribuyen el agua dentro del cultivo y contienen o alimentan los goteros.",
+        options: [
+            { name: "Tuberia PE 16 mm para goteo", spec: "Lateral reutilizable para goteros insertados o autocompensados.", use: "Buena opcion cuando se necesita mantenimiento y cambio de emisores." },
+            { name: "Cinta de riego 16 mm", spec: "Solucion economica para cultivos en hileras y temporadas definidas.", use: "Elegir espesor y espaciamiento segun cultivo." },
+            { name: "Manguera con gotero integrado", spec: "Lateral con emisores ya incorporados a distancia fija.", use: "Reduce errores de instalacion en marcos regulares." }
+        ]
+    },
+    valves: {
+        title: "Llaves de paso",
+        photoClass: "valves",
+        copy: "Elementos de corte para aislar sectores, limpiar lineas y operar el sistema con seguridad.",
+        options: [
+            { name: "Valvula bola PVC/HDPE", spec: "Corte manual rapido para matriz o sector.", use: "Debe coincidir con el diametro calculado de la tuberia principal." },
+            { name: "Valvula de compuerta", spec: "Permite apertura gradual, util en cabezales o tramos de mayor diametro.", use: "Requiere mas espacio y mantenimiento que una bola." },
+            { name: "Valvula sectorial", spec: "Corte por zona de riego para manejar turnos.", use: "Instalar una por sector o subunidad de riego." }
+        ]
+    },
+    emitters: {
+        title: "Goteros y conectores",
+        photoClass: "emitters",
+        copy: "Emisores y accesorios que entregan el agua al cultivo y conectan laterales, derivaciones y terminales.",
+        options: [
+            { name: "Gotero 2 L/h", spec: "Caudal referencial usado en el listado preliminar.", use: "Adecuado para riego localizado de baja descarga." },
+            { name: "Gotero autocompensado", spec: "Mantiene caudal mas estable ante variaciones de presion.", use: "Conveniente en terrenos con pendiente o lineas largas." },
+            { name: "Conectores, tees y terminales", spec: "Piezas para derivar, unir y cerrar laterales.", use: "Comprar segun numero de hileras y trazado final." }
+        ]
+    }
+};
+
 const modules = {
     inicio: "Inicio",
     terreno: "Terreno",
     hidraulica: "Hidraulica",
-    agua: "Agua y materiales",
+    materiales: "Materiales",
     diseno: "Recomendacion",
     resultados: "Reporte",
     api: "Sistema"
@@ -232,16 +294,20 @@ function handleFileSelect(event) {
     }
 }
 
-async function submitAnalysis() {
-    const file = $("fileInput")?.files[0];
+async function submitAnalysis(targetTab = "terreno") {
+    const file = $("fileInput")?.files[0] || window.selectedAnalysisFile;
     if (!file) {
         alert("Selecciona una imagen antes de iniciar el analisis.");
         return;
     }
 
     try {
+        window.selectedAnalysisFile = file;
         const formData = new FormData();
         formData.append("file", file);
+        Object.entries(hydraulicAssumptions).forEach(([key, value]) => {
+            formData.append(key, value);
+        });
         setLoadingState(true);
         setText("footerProgress", "en proceso");
 
@@ -258,12 +324,111 @@ async function submitAnalysis() {
         window.analysisResults = data.data;
         displayAnalysisResults(data.data);
         closeUploadModal();
-        switchTab("terreno");
+        switchTab(targetTab);
     } catch (error) {
         alert(`Error al enviar el archivo:\n${error.message}`);
         setText("footerState", "Error analisis");
     } finally {
         setLoadingState(false);
+    }
+}
+
+const metricInfo = {
+    pressure: {
+        title: "Presion requerida",
+        copy: "Presion minima estimada en la fuente. Se calcula con presion de operacion del gotero, perdida por desnivel, perdida por friccion y margen de seguridad.",
+        fields: [
+            ["emitter_operating_pressure_kpa", "Presion gotero", "kPa"],
+            ["pressure_safety_factor", "Margen seguridad", "x"]
+        ]
+    },
+    flow: {
+        title: "Caudal requerido estimado",
+        copy: "Demanda preliminar del sector. No es agua medida en la fuente: se estima multiplicando superficie del sector por caudal de diseno por hectarea, con un minimo configurable.",
+        fields: [
+            ["flow_per_hectare_l_min", "Caudal por hectarea", "L/min/ha"],
+            ["minimum_flow_l_min", "Caudal minimo", "L/min"],
+            ["max_sector_area_ha", "Sector maximo", "ha"]
+        ]
+    },
+    loss: {
+        title: "Perdida de carga",
+        copy: "Suma de perdida por desnivel y friccion. La friccion usa Hazen-Williams con longitud critica, diametro y coeficiente C.",
+        fields: [
+            ["hazen_williams_c", "Coeficiente Hazen-Williams", "C"],
+            ["minimum_pipe_length_m", "Longitud minima", "m"],
+            ["pipe_length_factor", "Factor longitud", "x"],
+            ["pipe_diameter_large_m", "Diametro sector >= 1 ha", "m"],
+            ["pipe_diameter_small_m", "Diametro sector < 1 ha", "m"]
+        ]
+    },
+    pump: {
+        title: "Potencia bomba",
+        copy: "HP estimados para mover el caudal requerido hasta la altura/presion total del terreno analizado. Se ajusta por rendimiento estimado de la bomba.",
+        fields: [
+            ["pump_efficiency", "Rendimiento bomba", "0-1"]
+        ]
+    }
+};
+
+function openMetricInfo(metricKey) {
+    const config = metricInfo[metricKey];
+    const modal = $("metricInfoModal");
+    const title = $("metricInfoTitle");
+    const copy = $("metricInfoCopy");
+    const settings = $("metricSettings");
+    if (!config || !modal || !settings) {
+        return;
+    }
+
+    activeMetricInfo = metricKey;
+    if (title) {
+        title.textContent = config.title;
+    }
+    if (copy) {
+        copy.textContent = config.copy;
+    }
+    settings.innerHTML = config.fields.map(([key, label, unit]) => `
+        <label class="setting-field">
+            <span>${label}</span>
+            <div>
+                <input type="number" step="0.001" data-assumption="${key}" value="${hydraulicAssumptions[key]}">
+                <small>${unit}</small>
+            </div>
+        </label>
+    `).join("");
+
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function closeMetricInfo() {
+    const modal = $("metricInfoModal");
+    if (modal) {
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
+    }
+    activeMetricInfo = null;
+}
+
+function saveMetricInfo() {
+    document.querySelectorAll("[data-assumption]").forEach(input => {
+        const key = input.dataset.assumption;
+        const value = Number(input.value);
+        if (Number.isFinite(value)) {
+            hydraulicAssumptions[key] = value;
+        }
+    });
+    closeMetricInfo();
+    if (window.selectedAnalysisFile) {
+        submitAnalysis("hidraulica");
+    }
+}
+
+function resetHydraulicAssumptions() {
+    hydraulicAssumptions = { ...DEFAULT_HYDRAULIC_ASSUMPTIONS };
+    if (activeMetricInfo) {
+        openMetricInfo(activeMetricInfo);
     }
 }
 
@@ -274,8 +439,11 @@ function displayAnalysisResults(analysisData) {
 
     const terrain = analysisData.terrain_analysis || {};
     const hydraulic = analysisData.hydraulic_analysis || {};
-    const water = analysisData.water_analysis || {};
+    const materials = analysisData.materials_analysis || {};
     const design = analysisData.design_recommendations || {};
+    if (hydraulic.assumptions) {
+        hydraulicAssumptions = { ...hydraulicAssumptions, ...hydraulic.assumptions };
+    }
 
     const fileName = analysisData.file_name || "--";
     const shortName = fileName.length > 28 ? `${fileName.slice(0, 25)}...` : fileName;
@@ -291,7 +459,7 @@ function displayAnalysisResults(analysisData) {
 
     setText("terrainStatus", "Activo");
     setText("hydraulicStatus", "Activo");
-    setText("waterStatus", "Activo");
+    setText("materialsStatus", "Generado");
     setText("designStatus", "Generada");
     setText("footerProgress", "100%");
     setText("footerState", "OK");
@@ -308,14 +476,6 @@ function displayAnalysisResults(analysisData) {
     setText("hydLoss", formatNumber(hydraulic.pressure_loss, 2));
     setText("hydRisk", hydraulic.hydraulic_risk || "--");
     setText("hydPumpPower", formatUnit(hydraulic.required_pump_power, " HP", 2));
-    setText("hydSurfaceLimit", formatUnit(design.pump_surface_limit, " ha", 2));
-
-    setText("waterPh", formatNumber(water.ph, 2));
-    setText("waterSalinity", formatNumber(water.salinity_ppm, 0));
-    setText("waterHardness", formatNumber(water.hardness_mg_l, 0));
-    setText("waterQuality", water.water_quality || "--");
-    setText("materialStatus", water.recommended_material ? "Generado" : "Pendiente");
-    setText("materialRecommendation", water.recommended_material || "No hay recomendacion disponible.");
 
     setText("designArea", formatNumber(design.estimated_area, 2));
     setText("designLength", formatNumber(design.estimated_drip_length, 0));
@@ -324,7 +484,7 @@ function displayAnalysisResults(analysisData) {
 
     renderHydraulicCharts(hydraulic);
     renderPumpCatalog(hydraulic);
-    renderWaterCharts(water);
+    renderMaterials(materials);
     renderRecommendations(design.recommendations || []);
     renderReport(analysisData);
 }
@@ -422,7 +582,8 @@ function renderHydraulicCharts(hydraulic) {
     }
 
     const rows = [
-        { label: "Presion fuente", value: hydraulic.source_pressure, max: 250, unit: " kPa", color: "var(--cyan)" },
+        { label: "Presion requerida", value: hydraulic.source_pressure, max: 500, unit: " kPa", color: "var(--cyan)" },
+        { label: "Antes de margen", value: hydraulic.pressure_before_safety, max: 500, unit: " kPa", color: "var(--green)" },
         { label: "Perdida total", value: hydraulic.pressure_loss, max: 250, unit: " kPa", color: "var(--orange)" },
         { label: "Desnivel", value: hydraulic.elevation_pressure_change, max: 120, unit: " kPa", color: "var(--purple)" },
         { label: "Friccion", value: hydraulic.friction_loss, max: 160, unit: " kPa", color: "var(--red)" },
@@ -441,13 +602,15 @@ function renderHydraulicCharts(hydraulic) {
 
     sectorChart.innerHTML = `
         <div class="gauge-card"><span>Sector</span><strong>${formatUnit(hydraulic.design_sector_area, " ha", 2)}</strong><small>area analizada</small></div>
+        <div class="gauge-card"><span>Gotero</span><strong>${formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0)}</strong><small>presion base</small></div>
+        <div class="gauge-card"><span>Margen</span><strong>${formatUnit(hydraulic.pressure_safety_factor, "x", 1)}</strong><small>factor seguridad</small></div>
         <div class="gauge-card"><span>Diametro</span><strong>${formatUnit(hydraulic.pipe_diameter, " mm", 0)}</strong><small>tuberia base</small></div>
         <div class="gauge-card"><span>Longitud</span><strong>${formatUnit(hydraulic.pipe_length, " m", 0)}</strong><small>tramo critico</small></div>
         <div class="gauge-card"><span>Presion final</span><strong>${formatUnit(hydraulic.final_pressure, " kPa", 2)}</strong><small>salida estimada</small></div>
-        <div class="gauge-card"><span>Caudal</span><strong>${formatUnit(hydraulic.available_flow, " L/min", 2)}</strong><small>sector</small></div>
+        <div class="gauge-card"><span>Caudal requerido</span><strong>${formatUnit(hydraulic.available_flow, " L/min", 2)}</strong><small>${formatUnit(hydraulic.flow_per_hectare, " L/min/ha", 2)}</small></div>
         <div class="gauge-card"><span>Riesgo</span><strong>${hydraulic.hydraulic_risk || "--"}</strong><small>criterio hidraulico</small></div>
         <div class="gauge-card"><span>Altura total</span><strong>${formatUnit(hydraulic.required_total_head, " m", 2)}</strong><small>carga dinamica</small></div>
-        <div class="gauge-card"><span>Potencia</span><strong>${formatUnit(hydraulic.required_pump_power, " HP", 2)}</strong><small>con eficiencia 60%</small></div>
+        <div class="gauge-card"><span>Potencia</span><strong>${formatUnit(hydraulic.required_pump_power, " HP", 2)}</strong><small>eficiencia ${formatUnit(hydraulic.assumptions?.pump_efficiency, "", 2)}</small></div>
         <div class="gauge-card"><span>Motobomba</span><strong>${hydraulic.recommended_pump?.model || "--"}</strong><small>${hydraulic.recommended_pump?.type || "catalogo"}</small></div>
     `;
 }
@@ -460,77 +623,178 @@ function renderPumpCatalog(hydraulic) {
     }
 
     const catalog = hydraulic.pump_catalog || [];
-    if (!catalog.length) {
-        container.innerHTML = '<p class="empty-state">Sin catalogo evaluado.</p>';
+    const matching = catalog.filter(pump => pump.meets_requirements);
+    const recommended = hydraulic.recommended_pump || null;
+    const spec = hydraulic.required_pump_spec || {};
+    currentPumpEvaluation = { catalog, matching, recommended, spec };
+
+    if (!recommended) {
+        container.innerHTML = '<p class="empty-state">Sin motobomba evaluada.</p>';
         if (status) {
             status.textContent = "Pendiente";
         }
         return;
     }
 
-    const recommended = hydraulic.recommended_pump?.model;
     if (status) {
-        status.textContent = recommended || "Referencial";
+        status.textContent = matching.length ? "Compatible" : "Sin coincidencia exacta";
     }
 
-    container.innerHTML = catalog.map(pump => {
-        const isSelected = pump.model === recommended;
-        const isSuitable = Boolean(pump.suitable_for_required_head);
-        return `
-            <div class="pump-card ${isSelected ? "selected" : ""} ${isSuitable ? "suitable" : "limited"}">
-                <div>
-                    <span>${pump.type || "Motobomba"}</span>
-                    <strong>${pump.model}</strong>
-                    <small>${pump.engine || "--"} | ${formatUnit(pump.engine_power_hp, " HP", 1)}</small>
-                </div>
-                <div><span>Caudal max.</span><strong>${formatUnit(pump.max_flow_l_min, " L/min", 0)}</strong></div>
-                <div><span>Altura max.</span><strong>${formatUnit(pump.max_head_m, " m", 1)}</strong></div>
-                <div><span>Superficie</span><strong>${formatUnit(pump.max_surface_ha, " ha", 2)}</strong></div>
-                <small>${pump.selection_note || ""}</small>
+    container.innerHTML = `
+        <button class="pump-requirement-card ${recommended.meets_requirements ? "suitable" : "limited"}" onclick="openPumpList()">
+            <div>
+                <span>Requerimiento calculado</span>
+                <strong>Bomba de ${formatUnit(spec.minimum_power_hp, " HP", 2)} para ${formatUnit(spec.required_flow_l_min, " L/min", 2)}</strong>
+                <small>${formatUnit(spec.required_head_m, " m", 2)} de altura total | ${formatUnit(spec.required_pressure_kpa, " kPa", 2)}</small>
             </div>
-        `;
-    }).join("");
+            <div>
+                <span>${recommended.meets_requirements ? "Modelo compatible sugerido" : "Mejor aproximacion catalogada"}</span>
+                <strong>${recommended.model}</strong>
+                <small>${recommended.type} | ${formatUnit(recommended.engine_power_hp, " HP", 1)}</small>
+            </div>
+            <small>${matching.length ? `${matching.length} modelo(s) cumplen. Toca para ver la lista.` : "Ningun modelo del catalogo cumple completamente. Toca para revisar detalles."}</small>
+        </button>
+    `;
 }
 
-function renderWaterCharts(water) {
-    const chemistryChart = $("waterChemistryChart");
-    const materialChart = $("materialCompatibilityChart");
-    if (!chemistryChart || !materialChart) {
+function openPumpList() {
+    const modal = $("pumpListModal");
+    const list = $("pumpList");
+    const summary = $("pumpListSummary");
+    if (!modal || !list || !currentPumpEvaluation) {
         return;
     }
 
-    const rows = [
-        { label: "pH", value: water.ph, max: 14, unit: "", color: "var(--cyan)", decimals: 2 },
-        { label: "Salinidad", value: water.salinity_ppm, max: 2000, unit: " ppm", color: "var(--orange)", decimals: 0 },
-        { label: "Dureza", value: water.hardness_mg_l, max: 500, unit: " mg/L", color: "var(--purple)", decimals: 0 }
-    ];
+    const { catalog, matching, spec } = currentPumpEvaluation;
+    if (summary) {
+        const searchUrl = buildPumpSearchUrl(spec);
+        summary.innerHTML = `
+            Requerido para el terreno: ${formatUnit(spec.minimum_power_hp, " HP", 2)}, ${formatUnit(spec.required_flow_l_min, " L/min", 2)} y ${formatUnit(spec.required_head_m, " m", 2)} de altura total. ${spec.terrain_context || ""}
+            <a class="pump-search-link" href="${searchUrl}" target="_blank" rel="noopener noreferrer">Buscar mas motobombas compatibles en internet</a>
+        `;
+    }
 
-    chemistryChart.innerHTML = rows.map(row => `
-        <div class="chart-row">
-            <span>${row.label}</span>
-            <div class="chart-track">
-                <span class="chart-fill" style="--value:${clampPercent(row.value, row.max)}%; --fill:${row.color};"></span>
+    const pumpsToShow = matching.length ? matching : catalog;
+    list.innerHTML = pumpsToShow.map(pump => `
+        <article class="pump-list-card ${pump.meets_requirements ? "suitable" : "limited"}">
+            <div>
+                <span>${pump.type || "Motobomba"}</span>
+                <strong>${pump.model}</strong>
+                <small>${pump.engine || "--"} | ${formatUnit(pump.engine_power_hp, " HP", 1)}</small>
             </div>
-            <strong class="chart-value">${formatUnit(row.value, row.unit, row.decimals)}</strong>
-        </div>
+            <div><span>Caudal max.</span><strong>${formatUnit(pump.max_flow_l_min, " L/min", 0)}</strong><small>margen ${formatUnit(pump.flow_margin_l_min, " L/min", 2)}</small></div>
+            <div><span>Altura max.</span><strong>${formatUnit(pump.max_head_m, " m", 1)}</strong><small>margen ${formatUnit(pump.head_margin_m, " m", 2)}</small></div>
+            <div><span>Fuente</span><strong>${pump.source || "Catalogo"}</strong><small><a href="${pump.source_url}" target="_blank" rel="noopener noreferrer">ver ficha</a></small></div>
+            <p>${pump.selection_note || ""}</p>
+        </article>
     `).join("");
 
-    const compatibility = water.material_compatibility || {};
-    const entries = Object.entries(compatibility);
-    if (!entries.length) {
-        materialChart.innerHTML = '<p class="empty-state">Sin compatibilidad calculada.</p>';
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function buildPumpSearchUrl(spec) {
+    const hp = Math.ceil(Number(spec.minimum_power_hp) || 1);
+    const flow = Math.ceil(Number(spec.required_flow_l_min) || 1);
+    const head = Math.ceil(Number(spec.required_head_m) || 1);
+    const query = `motobomba ${hp} HP ${flow} L/min ${head} m altura ficha tecnica`;
+    return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+function closePumpList() {
+    const modal = $("pumpListModal");
+    if (modal) {
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
+    }
+}
+
+function renderMaterials(materials) {
+    if (!materials || !Object.keys(materials).length) {
+        return;
+    }
+    currentMaterials = materials;
+
+    setText("matMainPipe", `${materials.main_pipe_type || "--"} ${materials.main_pipe_diameter_mm || "--"} mm`);
+    setText("matPipeClass", materials.pipe_pressure_class || "clase presion");
+    setText("matLateralPipe", `${materials.lateral_pipe_type || "--"} ${materials.lateral_diameter_mm || "--"} mm`);
+    setText("matValve", `${materials.valve_type || "--"} ${materials.valve_diameter_mm || "--"} mm`);
+    setText("matEmitters", materials.estimated_emitters ? formatNumber(materials.estimated_emitters, 0) : "--");
+    setText("materialsMessage", materials.message || "Listado preliminar de materiales.");
+
+    const list = $("materialsList");
+    if (list) {
+        const items = materials.items || [];
+        list.innerHTML = items.length ? items.map(item => `
+            <article class="material-item">
+                <span>${item.category || "Material"}</span>
+                <strong>${item.component || "--"}</strong>
+                <small>${item.quantity || "--"}</small>
+                <p>${item.purpose || ""}</p>
+            </article>
+        `).join("") : '<p class="empty-state">Sin materiales calculados.</p>';
+    }
+
+    const criteria = $("materialsCriteria");
+    if (criteria) {
+        criteria.innerHTML = `
+            <div class="gauge-card"><span>Filtro</span><strong>${materials.filter_type || "--"}</strong><small>proteccion goteros</small></div>
+            <div class="gauge-card"><span>Separacion gotero</span><strong>${formatUnit(materials.emitter_spacing_m, " m", 2)}</strong><small>supuesto base</small></div>
+            <div class="gauge-card"><span>Separacion laterales</span><strong>${formatUnit(materials.lateral_spacing_m, " m", 2)}</strong><small>entre lineas</small></div>
+            <div class="gauge-card"><span>Longitud laterales</span><strong>${formatUnit(materials.estimated_lateral_length_m, " m", 0)}</strong><small>estimada</small></div>
+            <div class="gauge-card"><span>Emisor</span><strong>${materials.emitter_type || "--"}</strong><small>referencial</small></div>
+            <div class="gauge-card"><span>Llave</span><strong>${formatUnit(materials.valve_diameter_mm, " mm", 0)}</strong><small>diametro sector</small></div>
+        `;
+    }
+}
+
+function openMaterialPopup(type) {
+    const config = MATERIAL_POPUPS[type];
+    const modal = $("materialPopupModal");
+    const title = $("materialPopupTitle");
+    const copy = $("materialPopupCopy");
+    const photo = $("materialPopupPhoto");
+    const list = $("materialPopupList");
+    if (!config || !modal || !list) {
         return;
     }
 
-    materialChart.innerHTML = entries.map(([name, status]) => {
-        const statusClass = normalizePriority(status).includes("media") ? "media" : normalizePriority(status).includes("baja") ? "baja" : "";
-        return `
-            <div class="compat-card ${statusClass}">
-                <span>${name.replace(/_/g, " ")}</span>
-                <strong>${status}</strong>
-            </div>
-        `;
-    }).join("");
+    const materials = currentMaterials || {};
+    const calculated = {
+        main_pipe: `${materials.main_pipe_type || "HDPE"} ${materials.main_pipe_diameter_mm || "--"} mm ${materials.pipe_pressure_class || ""}`.trim(),
+        laterals: `${materials.lateral_pipe_type || "Lateral de goteo"} ${materials.lateral_diameter_mm || 16} mm`,
+        valves: `${materials.valve_type || "Valvula bola"} ${materials.valve_diameter_mm || "--"} mm`,
+        emitters: `${materials.emitter_type || "Gotero"} | ${materials.estimated_emitters ? `${formatNumber(materials.estimated_emitters, 0)} unidades aprox.` : "cantidad segun trazado"}`
+    };
+
+    if (title) {
+        title.textContent = config.title;
+    }
+    if (copy) {
+        copy.textContent = `${config.copy} Seleccion calculada: ${calculated[type] || "--"}.`;
+    }
+    if (photo) {
+        photo.className = `material-photo ${config.photoClass}`;
+    }
+
+    list.innerHTML = config.options.map(option => `
+        <article class="material-option-card">
+            <span>${option.name}</span>
+            <strong>${option.spec}</strong>
+            <p>${option.use}</p>
+        </article>
+    `).join("");
+
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function closeMaterialPopup() {
+    const modal = $("materialPopupModal");
+    if (modal) {
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
+    }
 }
 
 function normalizePriority(priority) {
@@ -575,26 +839,409 @@ function renderReport(data) {
 
     const terrain = data.terrain_analysis || {};
     const hydraulic = data.hydraulic_analysis || {};
-    const water = data.water_analysis || {};
+    const materials = data.materials_analysis || {};
     const design = data.design_recommendations || {};
     const dimensions = data.image_dimensions || {};
+    const downloadBtn = $("reportDownloadBtn");
 
-    setText("reportState", "Disponible");
+    if (downloadBtn) {
+        downloadBtn.disabled = false;
+    }
 
     content.innerHTML = `
         <div class="report-row"><span>Archivo</span><strong>${data.file_name || "--"}</strong></div>
         <div class="report-row"><span>Dimensiones</span><strong>${dimensions.width || "--"} x ${dimensions.height || "--"} px</strong></div>
         <div class="report-row"><span>Terreno</span><strong>Pendiente ${formatUnit(terrain.slope_degrees, "°", 2)}, desnivel ${formatUnit(terrain.elevation_difference, " m", 2)}</strong></div>
         <div class="report-row"><span>Hidraulica</span><strong>Riesgo ${hydraulic.hydraulic_risk || "--"}, perdida ${formatUnit(hydraulic.pressure_loss, " kPa", 2)}</strong></div>
-        <div class="report-row"><span>Motobomba</span><strong>${hydraulic.recommended_pump?.model || "--"}, potencia requerida ${formatUnit(hydraulic.required_pump_power, " HP", 2)}, superficie limite ${formatUnit(design.pump_surface_limit, " ha", 2)}</strong></div>
-        <div class="report-row"><span>Agua</span><strong>pH ${formatNumber(water.ph, 2)}, calidad ${water.water_quality || "--"}</strong></div>
+        <div class="report-row"><span>Motobomba</span><strong>${hydraulic.recommended_pump?.model || "--"}, potencia requerida ${formatUnit(hydraulic.required_pump_power, " HP", 2)}, caudal requerido ${formatUnit(hydraulic.available_flow, " L/min", 2)}</strong></div>
+        <div class="report-row"><span>Materiales</span><strong>${materials.main_pipe_type || "--"} ${materials.main_pipe_diameter_mm || "--"} mm, laterales ${materials.lateral_diameter_mm || "--"} mm, llave ${materials.valve_diameter_mm || "--"} mm</strong></div>
+        <div class="report-row"><span>Supuestos</span><strong>${formatUnit(hydraulic.flow_per_hectare, " L/min/ha", 2)}, gotero ${formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0)}, margen ${formatUnit(hydraulic.pressure_safety_factor, "x", 1)}</strong></div>
         <div class="report-row"><span>Diseno</span><strong>${design.complexity_level || "--"} | costo ${design.estimated_cost_level || "--"}</strong></div>
+    `;
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function reportMetric(label, value) {
+    return `
+        <div class="pdf-metric">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+        </div>
+    `;
+}
+
+function downloadReportPdf() {
+    const data = window.analysisResults;
+    if (!data) {
+        alert("Primero genera un analisis para descargar el reporte.");
+        return;
+    }
+
+    const reportWindow = window.open("", "_blank");
+    if (!reportWindow) {
+        alert("El navegador bloqueo la ventana del reporte. Permite ventanas emergentes para descargar el PDF.");
+        return;
+    }
+
+    reportWindow.document.open();
+    reportWindow.document.write(buildReportPdfHtml(data));
+    reportWindow.document.close();
+    reportWindow.focus();
+
+    setTimeout(() => {
+        reportWindow.print();
+    }, 450);
+}
+
+function buildReportPdfHtml(data) {
+    const terrain = data.terrain_analysis || {};
+    const hydraulic = data.hydraulic_analysis || {};
+    const materials = data.materials_analysis || {};
+    const design = data.design_recommendations || {};
+    const dimensions = data.image_dimensions || {};
+    const pump = hydraulic.recommended_pump || {};
+    const spec = hydraulic.required_pump_spec || {};
+    const recommendations = design.recommendations || [];
+    const generatedAt = new Date().toLocaleString("es-CL");
+
+    const recommendationRows = recommendations.length
+        ? recommendations.map(rec => `
+            <div class="pdf-recommendation">
+                <span>${escapeHtml(rec.priority || "Info")}</span>
+                <div>
+                    <strong>${escapeHtml(rec.type || "Criterio")}</strong>
+                    <p>${escapeHtml(rec.message || "")}</p>
+                    <small>${escapeHtml(rec.action || "")}</small>
+                </div>
+            </div>
+        `).join("")
+        : '<p class="pdf-muted">No hay recomendaciones disponibles.</p>';
+    const materialRows = (materials.items || []).length
+        ? materials.items.map(item => `
+            <div class="pdf-material">
+                <span>${escapeHtml(item.category || "Material")}</span>
+                <strong>${escapeHtml(item.component || "--")}</strong>
+                <small>${escapeHtml(item.quantity || "--")}</small>
+                <p>${escapeHtml(item.purpose || "")}</p>
+            </div>
+        `).join("")
+        : '<p class="pdf-muted">No hay materiales calculados.</p>';
+
+    return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte riego - ${escapeHtml(data.file_name || "analisis")}</title>
+    <style>
+        @page { size: A4; margin: 14mm; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: #162033;
+            background: #ffffff;
+            font-family: "Segoe UI", Arial, sans-serif;
+            line-height: 1.45;
+        }
+        .pdf-page {
+            max-width: 980px;
+            margin: 0 auto;
+        }
+        .pdf-hero {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 18px;
+            padding: 22px;
+            color: #ffffff;
+            background: linear-gradient(135deg, #08111f, #0d5362 64%, #14a07a);
+            border-radius: 14px;
+        }
+        .pdf-kicker {
+            display: block;
+            color: #8ff4ff;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        h1, h2, h3, p { margin: 0; }
+        h1 { font-size: 26px; line-height: 1.12; }
+        .pdf-hero p { color: #c7e8f0; margin-top: 10px; }
+        .pdf-meta {
+            display: grid;
+            gap: 8px;
+            align-content: center;
+            font-size: 12px;
+        }
+        .pdf-meta div {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.22);
+        }
+        .pdf-section {
+            margin-top: 18px;
+            padding: 18px;
+            border: 1px solid #d8e2ee;
+            border-radius: 12px;
+            background: #f8fbff;
+            break-inside: avoid;
+        }
+        .pdf-section h2 {
+            color: #0b4b5b;
+            font-size: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 12px;
+        }
+        .pdf-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .pdf-metric {
+            min-height: 76px;
+            padding: 12px;
+            border: 1px solid #dce7f3;
+            border-radius: 10px;
+            background: #ffffff;
+        }
+        .pdf-metric span {
+            display: block;
+            color: #607086;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .pdf-metric strong {
+            display: block;
+            color: #092b36;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 17px;
+            margin-top: 8px;
+            overflow-wrap: anywhere;
+        }
+        .pdf-pump {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .pdf-callout {
+            padding: 14px;
+            border-radius: 10px;
+            background: #082033;
+            color: #ffffff;
+        }
+        .pdf-callout span {
+            display: block;
+            color: #8ff4ff;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+        .pdf-callout strong {
+            display: block;
+            font-size: 20px;
+            margin-top: 6px;
+        }
+        .pdf-callout small { color: #c7e8f0; }
+        .pdf-recommendation {
+            display: grid;
+            grid-template-columns: 82px 1fr;
+            gap: 12px;
+            padding: 12px;
+            border: 1px solid #dce7f3;
+            border-radius: 10px;
+            background: #ffffff;
+            margin-top: 9px;
+        }
+        .pdf-recommendation > span {
+            display: grid;
+            place-items: center;
+            min-height: 34px;
+            border-radius: 7px;
+            color: #08313d;
+            background: #dff9ff;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+        .pdf-recommendation strong { color: #092b36; }
+        .pdf-recommendation p { color: #3d4e64; margin-top: 4px; }
+        .pdf-recommendation small { display: block; color: #697b91; margin-top: 4px; }
+        .pdf-muted { color: #697b91; }
+        .pdf-material {
+            padding: 12px;
+            border: 1px solid #dce7f3;
+            border-radius: 10px;
+            background: #ffffff;
+            margin-top: 9px;
+        }
+        .pdf-material span {
+            display: block;
+            color: #607086;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .pdf-material strong {
+            display: block;
+            color: #092b36;
+            margin-top: 4px;
+        }
+        .pdf-material small {
+            display: block;
+            color: #0b4b5b;
+            font-family: Consolas, "Courier New", monospace;
+            margin-top: 3px;
+        }
+        .pdf-material p {
+            color: #3d4e64;
+            margin-top: 5px;
+        }
+        .pdf-footer {
+            margin-top: 18px;
+            padding-top: 10px;
+            border-top: 1px solid #d8e2ee;
+            color: #697b91;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        @media print {
+            .pdf-section { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <main class="pdf-page">
+        <section class="pdf-hero">
+            <div>
+                <span class="pdf-kicker">Reporte tecnico</span>
+                <h1>Sistema de recomendacion para riego por goteo</h1>
+                <p>Resumen consolidado del analisis geoespacial e hidraulico para el terreno cargado.</p>
+            </div>
+            <div class="pdf-meta">
+                <div><span>Archivo</span><strong>${escapeHtml(data.file_name || "--")}</strong></div>
+                <div><span>Fecha</span><strong>${escapeHtml(generatedAt)}</strong></div>
+                <div><span>Estado</span><strong>Completado</strong></div>
+            </div>
+        </section>
+
+        <section class="pdf-section">
+            <h2>Resumen Del Terreno</h2>
+            <div class="pdf-grid">
+                ${reportMetric("Dimensiones", `${dimensions.width || "--"} x ${dimensions.height || "--"} px`)}
+                ${reportMetric("Area estimada", formatUnit(design.estimated_area, " ha", 2))}
+                ${reportMetric("Longitud riego", formatUnit(design.estimated_drip_length, " m", 0))}
+                ${reportMetric("Elevacion maxima", formatUnit(terrain.max_elevation, " m", 2))}
+                ${reportMetric("Elevacion minima", formatUnit(terrain.min_elevation, " m", 2))}
+                ${reportMetric("Desnivel", formatUnit(terrain.elevation_difference, " m", 2))}
+                ${reportMetric("Pendiente media", formatUnit(terrain.slope_degrees, " grados", 2))}
+                ${reportMetric("Zonas criticas", formatUnit(terrain.critical_zones_percentage, "%", 0))}
+                ${reportMetric("Fuente elevacion", terrain.source || "--")}
+            </div>
+        </section>
+
+        <section class="pdf-section">
+            <h2>Analisis Hidraulico</h2>
+            <div class="pdf-grid">
+                ${reportMetric("Presion requerida", formatUnit(hydraulic.source_pressure, " kPa", 2))}
+                ${reportMetric("Caudal requerido", formatUnit(hydraulic.available_flow, " L/min", 2))}
+                ${reportMetric("Perdida de carga", formatUnit(hydraulic.pressure_loss, " kPa", 2))}
+                ${reportMetric("Friccion", formatUnit(hydraulic.friction_loss, " kPa", 2))}
+                ${reportMetric("Desnivel hidraulico", formatUnit(hydraulic.elevation_pressure_change, " kPa", 2))}
+                ${reportMetric("Riesgo", hydraulic.hydraulic_risk || "--")}
+            </div>
+        </section>
+
+        <section class="pdf-section">
+            <h2>Motobomba Recomendada</h2>
+            <div class="pdf-pump">
+                <div class="pdf-callout">
+                    <span>Requerimiento calculado</span>
+                    <strong>${escapeHtml(formatUnit(spec.minimum_power_hp || hydraulic.required_pump_power, " HP", 2))}</strong>
+                    <small>${escapeHtml(formatUnit(spec.required_flow_l_min || hydraulic.available_flow, " L/min", 2))} | ${escapeHtml(formatUnit(spec.required_head_m || hydraulic.required_total_head, " m", 2))}</small>
+                </div>
+                <div class="pdf-callout">
+                    <span>Modelo sugerido</span>
+                    <strong>${escapeHtml(pump.model || "--")}</strong>
+                    <small>${escapeHtml(pump.type || "Motobomba")} | ${escapeHtml(formatUnit(pump.engine_power_hp, " HP", 1))}</small>
+                </div>
+            </div>
+        </section>
+
+        <section class="pdf-section">
+            <h2>Materiales Del Sistema</h2>
+            <div class="pdf-grid">
+                ${reportMetric("Tuberia principal", `${materials.main_pipe_type || "--"} ${materials.main_pipe_diameter_mm || "--"} mm`)}
+                ${reportMetric("Clase presion", materials.pipe_pressure_class || "--")}
+                ${reportMetric("Laterales", `${materials.lateral_pipe_type || "--"} ${materials.lateral_diameter_mm || "--"} mm`)}
+                ${reportMetric("Llave de paso", `${materials.valve_type || "--"} ${materials.valve_diameter_mm || "--"} mm`)}
+                ${reportMetric("Filtro", materials.filter_type || "--")}
+                ${reportMetric("Goteros", materials.estimated_emitters ? `${formatNumber(materials.estimated_emitters, 0)} unidades` : "--")}
+            </div>
+            ${materialRows}
+        </section>
+
+        <section class="pdf-section">
+            <h2>Supuestos Configurables</h2>
+            <div class="pdf-grid">
+                ${reportMetric("Demanda de riego", formatUnit(hydraulic.flow_per_hectare, " L/min/ha", 2))}
+                ${reportMetric("Presion gotero", formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0))}
+                ${reportMetric("Margen seguridad", formatUnit(hydraulic.pressure_safety_factor, "x", 1))}
+                ${reportMetric("Rendimiento bomba", formatNumber(hydraulic.assumptions?.pump_efficiency, 2))}
+                ${reportMetric("Diametro tuberia", formatUnit(hydraulic.pipe_diameter, " mm", 0))}
+                ${reportMetric("Longitud critica", formatUnit(hydraulic.pipe_length, " m", 0))}
+            </div>
+        </section>
+
+        <section class="pdf-section">
+            <h2>Recomendaciones</h2>
+            ${recommendationRows}
+        </section>
+
+        <footer class="pdf-footer">
+            <span>USACH | Tesis 2026</span>
+            <span>Reporte generado por el dashboard tecnico de riego</span>
+        </footer>
+    </main>
+</body>
+</html>
     `;
 }
 
 window.addEventListener("keydown", event => {
     if (event.key === "Escape") {
+        closeMaterialPopup();
+        closePumpList();
+        closeMetricInfo();
         closeUploadModal();
+    }
+});
+
+document.addEventListener("keydown", event => {
+    const target = event.target;
+    if (
+        target?.classList?.contains("material-summary-card") &&
+        (event.key === "Enter" || event.key === " ")
+    ) {
+        event.preventDefault();
+        target.click();
     }
 });
 

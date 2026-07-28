@@ -336,22 +336,24 @@ class ImageAnalysisEndpoint(Resource):
         {
             'model': 'Honda WB20',
             'type': 'Centrifuga 2 pulg.',
-            'engine': 'GX120',
-            'engine_power_hp': 3.5,
-            'max_flow_l_min': 621,
+            'engine': 'GX160',
+            'engine_power_hp': 4.8,
+            'max_flow_l_min': 670,
             'max_head_m': 32.0,
-            'max_pressure_kpa': 310,
-            'source': 'Honda Power Equipment WB20'
+            'max_pressure_kpa': 313.92,
+            'source': 'Honda Fuerza Chile',
+            'source_url': 'https://fuerza.honda.cl/motobomba/motobomba-honda-wb20/'
         },
         {
             'model': 'Honda WB30',
             'type': 'Centrifuga 3 pulg.',
             'engine': 'GX160',
             'engine_power_hp': 4.8,
-            'max_flow_l_min': 1098,
-            'max_head_m': 25.9,
-            'max_pressure_kpa': 255,
-            'source': 'Honda Power Equipment WB30'
+            'max_flow_l_min': 1100,
+            'max_head_m': 23.0,
+            'max_pressure_kpa': 225.63,
+            'source': 'Honda Fuerza Chile',
+            'source_url': 'https://fuerza.honda.cl/motobomba/motobomba-honda-wb30/'
         },
         {
             'model': 'Honda WH20',
@@ -359,9 +361,76 @@ class ImageAnalysisEndpoint(Resource):
             'engine': 'GX160',
             'engine_power_hp': 4.8,
             'max_flow_l_min': 450,
-            'max_head_m': 45.1,
-            'max_pressure_kpa': 441,
-            'source': 'Honda Power Equipment WH20'
+            'max_head_m': 45.0,
+            'max_pressure_kpa': 441.45,
+            'source': 'Honda Fuerza Chile',
+            'source_url': 'https://fuerza.honda.cl/motobomba/motobomba-honda-wh20/'
+        },
+        {
+            'model': 'Honda WT30',
+            'type': 'Aguas turbias 3 pulg.',
+            'engine': 'GX270',
+            'engine_power_hp': 8.3,
+            'max_flow_l_min': 1210,
+            'max_head_m': 27.0,
+            'max_pressure_kpa': 264.87,
+            'source': 'Honda Fuerza Chile',
+            'source_url': 'https://fuerza.honda.cl/motobomba/motobomba-honda-wt30/'
+        },
+        {
+            'model': 'Koshin SEV-50X',
+            'type': 'Centrifuga agua limpia 2 pulg.',
+            'engine': 'Koshin K180',
+            'engine_power_hp': 4.8,
+            'max_flow_l_min': 620,
+            'max_head_m': 27.0,
+            'max_pressure_kpa': 264.87,
+            'source': 'Koshin Pump',
+            'source_url': 'https://koshin-pump.com/en/product/sev-50x/'
+        },
+        {
+            'model': 'Koshin KTZ-50X',
+            'type': 'Aguas sucias 2 pulg.',
+            'engine': 'Koshin K180',
+            'engine_power_hp': 4.7,
+            'max_flow_l_min': 680,
+            'max_head_m': 22.0,
+            'max_pressure_kpa': 215.82,
+            'source': 'Koshin LTD',
+            'source_url': 'https://www.koshin-ltd.jp/en/products/60.html'
+        },
+        {
+            'model': 'Koshin KTH-50X',
+            'type': 'Aguas sucias 2 pulg.',
+            'engine': 'Honda GX160',
+            'engine_power_hp': 4.8,
+            'max_flow_l_min': 700,
+            'max_head_m': 30.0,
+            'max_pressure_kpa': 294.30,
+            'source': 'Koshin Espana',
+            'source_url': 'https://koshin.es/producto/kth-80x/'
+        },
+        {
+            'model': 'Daishin-Honda SCH-5050HX',
+            'type': 'Alta presion 2 pulg.',
+            'engine': 'Honda GX160',
+            'engine_power_hp': 5.5,
+            'max_flow_l_min': 400,
+            'max_head_m': 50.0,
+            'max_pressure_kpa': 490.50,
+            'source': 'Procimspa Chile',
+            'source_url': 'https://www.procimspa.cl/m/?Id=1383&L=S1'
+        },
+        {
+            'model': 'Evans 7IME1000',
+            'type': 'Industrial electrica 3 pulg.',
+            'engine': 'Electrico trifasico',
+            'engine_power_hp': 10.0,
+            'max_flow_l_min': 1500,
+            'max_head_m': 40.0,
+            'max_pressure_kpa': 392.40,
+            'source': 'Evans Mexico',
+            'source_url': 'https://evans.com.mx/bomba-industrial-electrica-10-hp-7ime1000.html'
         }
     ]
     
@@ -420,8 +489,10 @@ class ImageAnalysisEndpoint(Resource):
             file.save(temp_path)
             logger.info(f"File saved: {temp_path}")
             
+            assumptions = self._parse_hydraulic_assumptions(request.form)
+
             # Procesar la imagen y extraer parametros
-            analysis_results = self._analyze_image(temp_path, file.filename)
+            analysis_results = self._analyze_image(temp_path, file.filename, assumptions)
             
             # Return success with analysis results
             return APIResponse(
@@ -445,7 +516,48 @@ class ImageAnalysisEndpoint(Resource):
                 errors=[str(e)]
             ).to_dict(), 500
     
-    def _analyze_image(self, file_path, filename):
+    def _parse_hydraulic_assumptions(self, form_data):
+        defaults = {
+            'flow_per_hectare_l_min': 35.0,
+            'emitter_operating_pressure_kpa': 100.0,
+            'pressure_safety_factor': 1.2,
+            'pump_efficiency': 0.60,
+            'max_sector_area_ha': 3.0,
+            'minimum_flow_l_min': 20.0,
+            'hazen_williams_c': 150.0,
+            'pipe_diameter_large_m': 0.04,
+            'pipe_diameter_small_m': 0.032,
+            'minimum_pipe_length_m': 80.0,
+            'pipe_length_factor': 1.25
+        }
+        ranges = {
+            'flow_per_hectare_l_min': (1.0, 500.0),
+            'emitter_operating_pressure_kpa': (10.0, 500.0),
+            'pressure_safety_factor': (1.0, 2.5),
+            'pump_efficiency': (0.1, 0.95),
+            'max_sector_area_ha': (0.1, 100.0),
+            'minimum_flow_l_min': (0.0, 500.0),
+            'hazen_williams_c': (60.0, 180.0),
+            'pipe_diameter_large_m': (0.005, 0.5),
+            'pipe_diameter_small_m': (0.005, 0.5),
+            'minimum_pipe_length_m': (1.0, 5000.0),
+            'pipe_length_factor': (0.1, 10.0)
+        }
+
+        assumptions = {}
+        for key, default in defaults.items():
+            raw_value = form_data.get(key, default)
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                value = default
+
+            lower, upper = ranges[key]
+            assumptions[key] = min(max(value, lower), upper)
+
+        return assumptions
+
+    def _analyze_image(self, file_path, filename, hydraulic_assumptions=None):
         """
         Analyze either a DEM GeoTIFF or a georeferenced drone GeoTIFF.
         RGB imagery is used only for its coordinates; elevation comes from
@@ -538,9 +650,9 @@ class ImageAnalysisEndpoint(Resource):
         hydraulic_analysis = self._build_preliminary_hydraulic_analysis(
             slope_percentage=slope_percentage,
             elevation_diff=elevation_diff,
-            area_hectares=source_area
+            area_hectares=source_area,
+            assumptions=hydraulic_assumptions
         )
-        water_analysis = self._build_reference_water_analysis()
 
         if slope_percentage is None:
             recommendations = [{
@@ -564,17 +676,21 @@ class ImageAnalysisEndpoint(Resource):
                 'action': 'Continuar con calculo hidraulico usando caudal, diametro, longitud y presion disponible.'
             }]
 
+        estimated_drip_length = self._estimate_drip_length(source_area)
+        materials_analysis = self._build_materials_analysis(
+            hydraulic_analysis=hydraulic_analysis,
+            area_hectares=source_area,
+            estimated_drip_length=estimated_drip_length
+        )
         recommendations.extend([
             self._hydraulic_recommendation(hydraulic_analysis),
-            self._water_material_recommendation(water_analysis)
+            self._materials_recommendation(materials_analysis)
         ])
 
-        estimated_drip_length = self._estimate_drip_length(source_area)
         design_analysis = {
             'recommendations': recommendations,
             'estimated_area': source_area,
             'estimated_drip_length': estimated_drip_length,
-            'pump_surface_limit': hydraulic_analysis.get('recommended_pump', {}).get('max_surface_ha'),
             'complexity_level': self._classify_design_complexity(
                 slope_percentage,
                 source_area,
@@ -597,7 +713,7 @@ class ImageAnalysisEndpoint(Resource):
             },
             'terrain_analysis': terrain_analysis,
             'hydraulic_analysis': hydraulic_analysis,
-            'water_analysis': water_analysis,
+            'materials_analysis': materials_analysis,
             'design_recommendations': design_analysis,
             'status': 'completed',
             'message': 'Analisis completado desde DEM GeoTIFF o Google Elevation API'
@@ -726,39 +842,54 @@ class ImageAnalysisEndpoint(Resource):
             })
         return distribution
 
-    def _build_preliminary_hydraulic_analysis(self, slope_percentage, elevation_diff, area_hectares):
-        initial_pressure_kpa = 150.0
+    def _build_preliminary_hydraulic_analysis(self, slope_percentage, elevation_diff, area_hectares, assumptions=None):
+        assumptions = assumptions or self._parse_hydraulic_assumptions({})
         area = area_hectares if area_hectares and area_hectares > 0 else 1.0
-        design_sector_ha = min(area, 3.0)
-        flow_per_hectare_l_min = 35.0
-        available_flow_l_min = max(20.0, design_sector_ha * 35.0)
+        design_sector_ha = min(area, assumptions['max_sector_area_ha'])
+        flow_per_hectare_l_min = assumptions['flow_per_hectare_l_min']
+        available_flow_l_min = max(
+            assumptions['minimum_flow_l_min'],
+            design_sector_ha * flow_per_hectare_l_min
+        )
         flow_m3_s = available_flow_l_min / 60000
-        pipe_length_m = max(80.0, (design_sector_ha * 10000) ** 0.5 * 1.25)
-        pipe_diameter_m = 0.04 if design_sector_ha >= 1 else 0.032
+        pipe_length_m = max(
+            assumptions['minimum_pipe_length_m'],
+            (design_sector_ha * 10000) ** 0.5 * assumptions['pipe_length_factor']
+        )
+        pipe_diameter_m = (
+            assumptions['pipe_diameter_large_m']
+            if design_sector_ha >= 1 else
+            assumptions['pipe_diameter_small_m']
+        )
 
         friction_loss_bar = self.hydraulic.calculate_hazen_williams_loss(
             length=pipe_length_m,
             flow_rate=flow_m3_s,
             diameter=pipe_diameter_m,
-            c_coefficient=150
+            c_coefficient=assumptions['hazen_williams_c']
         )
         elevation_pressure_kpa = elevation_diff * 9.81
         friction_loss_kpa = friction_loss_bar * 100
         total_pressure_loss_kpa = friction_loss_kpa + elevation_pressure_kpa
+        emitter_operating_pressure_kpa = assumptions['emitter_operating_pressure_kpa']
+        safety_factor = assumptions['pressure_safety_factor']
+        pressure_before_safety_kpa = emitter_operating_pressure_kpa + total_pressure_loss_kpa
+        initial_pressure_kpa = pressure_before_safety_kpa * safety_factor
         final_pressure_kpa = initial_pressure_kpa - total_pressure_loss_kpa
-        required_total_pressure_kpa = initial_pressure_kpa + total_pressure_loss_kpa
+        required_total_pressure_kpa = initial_pressure_kpa
         required_total_head_m = required_total_pressure_kpa / 9.81
         required_pump_power_hp = self._required_pump_power_hp(
             flow_l_min=available_flow_l_min,
-            total_head_m=required_total_head_m
+            total_head_m=required_total_head_m,
+            efficiency=assumptions['pump_efficiency']
         )
         pump_catalog = self._evaluate_pump_catalog(
             required_total_head_m=required_total_head_m,
             required_total_pressure_kpa=required_total_pressure_kpa,
-            flow_per_hectare_l_min=flow_per_hectare_l_min
+            required_flow_l_min=available_flow_l_min
         )
         recommended_pump = next(
-            (pump for pump in pump_catalog if pump['suitable_for_required_head']),
+            (pump for pump in pump_catalog if pump['meets_requirements']),
             pump_catalog[-1] if pump_catalog else None
         )
 
@@ -771,6 +902,9 @@ class ImageAnalysisEndpoint(Resource):
 
         return {
             'source_pressure': round(initial_pressure_kpa, 2),
+            'emitter_operating_pressure': round(emitter_operating_pressure_kpa, 2),
+            'pressure_safety_factor': safety_factor,
+            'pressure_before_safety': round(pressure_before_safety_kpa, 2),
             'available_flow': round(available_flow_l_min, 2),
             'flow_per_hectare': round(flow_per_hectare_l_min, 2),
             'pressure_loss': round(total_pressure_loss_kpa, 2),
@@ -786,7 +920,22 @@ class ImageAnalysisEndpoint(Resource):
             'friction_loss': round(friction_loss_kpa, 2),
             'pump_catalog': pump_catalog,
             'recommended_pump': recommended_pump,
-            'calculation_basis': 'Preliminar por sector: desnivel DEM/Google + Hazen-Williams con supuestos de diseno; bomba evaluada con caudal maximo y altura total de catalogo.'
+            'required_pump_spec': {
+                'minimum_power_hp': round(required_pump_power_hp, 2),
+                'required_flow_l_min': round(available_flow_l_min, 2),
+                'required_head_m': round(required_total_head_m, 2),
+                'required_pressure_kpa': round(required_total_pressure_kpa, 2),
+                'terrain_context': (
+                    f"Sector estimado de {round(design_sector_ha, 2)} ha, "
+                    f"desnivel {round(elevation_diff, 2)} m, "
+                    f"perdida total {round(total_pressure_loss_kpa, 2)} kPa."
+                )
+            },
+            'assumptions': {
+                key: round(value, 4)
+                for key, value in assumptions.items()
+            },
+            'calculation_basis': 'Presion minima requerida en fuente = presion operacion goteros + desnivel DEM/Google + friccion Hazen-Williams, con margen configurable; bomba evaluada con caudal maximo y altura total de catalogo.'
         }
 
     def _required_pump_power_hp(self, flow_l_min, total_head_m, efficiency=0.60):
@@ -794,41 +943,130 @@ class ImageAnalysisEndpoint(Resource):
         watts = 1000 * 9.81 * flow_m3_s * total_head_m / efficiency
         return watts / 745.7
 
-    def _evaluate_pump_catalog(self, required_total_head_m, required_total_pressure_kpa, flow_per_hectare_l_min):
+    def _evaluate_pump_catalog(self, required_total_head_m, required_total_pressure_kpa, required_flow_l_min):
         evaluated = []
         for pump in self.PUMP_CATALOG:
-            max_surface_ha = pump['max_flow_l_min'] / flow_per_hectare_l_min
-            suitable = (
+            meets_flow = pump['max_flow_l_min'] >= required_flow_l_min
+            meets_head = (
                 pump['max_head_m'] >= required_total_head_m and
                 pump['max_pressure_kpa'] >= required_total_pressure_kpa
             )
+            meets_requirements = meets_flow and meets_head
             item = dict(pump)
             item.update({
-                'max_surface_ha': round(max_surface_ha, 2),
-                'suitable_for_required_head': suitable,
+                'meets_flow': meets_flow,
+                'meets_head': meets_head,
+                'meets_requirements': meets_requirements,
+                'flow_margin_l_min': round(pump['max_flow_l_min'] - required_flow_l_min, 2),
+                'head_margin_m': round(pump['max_head_m'] - required_total_head_m, 2),
                 'selection_note': (
-                    'Cumple altura/presion preliminar para el sector analizado.'
-                    if suitable else
-                    'No cumple la altura/presion preliminar requerida para este sector.'
+                    'Cumple caudal y altura/presion requeridos para el terreno analizado.'
+                    if meets_requirements else
+                    'No cumple completamente el caudal y/o la altura requerida; revisar alternativa de mayor capacidad.'
                 )
             })
             evaluated.append(item)
-        return sorted(evaluated, key=lambda pump: (not pump['suitable_for_required_head'], pump['engine_power_hp'], pump['max_flow_l_min']))
+        return sorted(
+            evaluated,
+            key=lambda pump: (
+                not pump['meets_requirements'],
+                not pump['meets_head'],
+                not pump['meets_flow'],
+                pump['engine_power_hp'],
+                pump['max_flow_l_min']
+            )
+        )
 
-    def _build_reference_water_analysis(self):
-        return {
-            'ph': 7.2,
-            'salinity_ppm': 450,
-            'hardness_mg_l': 180,
-            'material_compatibility': {
-                'hdpe': 'Excelente',
-                'pvc': 'Buena',
-                'acero_galvanizado': 'Media',
-                'goteros': 'Buena'
+    def _build_materials_analysis(self, hydraulic_analysis, area_hectares, estimated_drip_length):
+        pipe_diameter_mm = hydraulic_analysis.get('pipe_diameter') or 32
+        pressure_kpa = hydraulic_analysis.get('source_pressure') or 0
+        flow_l_min = hydraulic_analysis.get('available_flow') or 0
+        sector_area = hydraulic_analysis.get('design_sector_area') or (area_hectares or 1)
+        drip_length_m = estimated_drip_length or self._estimate_drip_length(sector_area) or 0
+        lateral_spacing_m = 2.0
+        emitter_spacing_m = 0.3
+        emitter_flow_l_h = 2.0
+        estimated_emitters = int(round(drip_length_m / emitter_spacing_m)) if drip_length_m else None
+
+        if pressure_kpa > 300:
+            pipe_pressure_class = 'PN 10'
+        elif pressure_kpa > 180:
+            pipe_pressure_class = 'PN 6'
+        else:
+            pipe_pressure_class = 'PN 4'
+
+        main_pipe_type = 'HDPE'
+        lateral_pipe_type = 'Cinta o tuberia de goteo PE'
+        valve_size = f"{int(pipe_diameter_mm)} mm"
+        filter_mesh = '120 mesh' if flow_l_min <= 100 else '120-150 mesh'
+
+        items = [
+            {
+                'category': 'Tuberia principal',
+                'component': f'{main_pipe_type} {int(pipe_diameter_mm)} mm {pipe_pressure_class}',
+                'quantity': f"{hydraulic_analysis.get('pipe_length', 0)} m",
+                'purpose': 'Conducir el caudal desde la fuente hasta el sector de riego.'
             },
-            'recommended_material': 'HDPE 16-20 mm con filtrado de malla/disco',
-            'water_quality': 'Buena referencial',
-            'message': 'Perfil referencial usado cuando no hay analisis de laboratorio; debe validarse con pH, salinidad y dureza reales.'
+            {
+                'category': 'Laterales de goteo',
+                'component': f'{lateral_pipe_type} 16 mm',
+                'quantity': f"{round(drip_length_m, 0)} m" if drip_length_m else 'Definir con plano de cultivo',
+                'purpose': 'Distribuir agua en las lineas de cultivo.'
+            },
+            {
+                'category': 'Goteros',
+                'component': f'Goteros {emitter_flow_l_h} L/h cada {emitter_spacing_m} m',
+                'quantity': f"{estimated_emitters} unidades aprox." if estimated_emitters else 'Definir con separacion real',
+                'purpose': 'Aplicar el agua de forma localizada.'
+            },
+            {
+                'category': 'Llave de paso',
+                'component': f'Valvula bola PVC/HDPE {valve_size}',
+                'quantity': '1 por sector + 1 general',
+                'purpose': 'Aislar sectores para operacion y mantenimiento.'
+            },
+            {
+                'category': 'Filtro',
+                'component': f'Filtro de malla o disco {filter_mesh}',
+                'quantity': '1 unidad en cabezal',
+                'purpose': 'Proteger goteros frente a obstrucciones.'
+            },
+            {
+                'category': 'Regulacion',
+                'component': 'Regulador de presion para goteo',
+                'quantity': '1 por sector',
+                'purpose': 'Mantener presion estable en las lineas laterales.'
+            },
+            {
+                'category': 'Control',
+                'component': 'Manometro 0-6 bar',
+                'quantity': '2 unidades',
+                'purpose': 'Verificar presion de entrada y salida del sector.'
+            },
+            {
+                'category': 'Conexiones',
+                'component': 'Tee, codos, reducciones, abrazaderas y terminales',
+                'quantity': 'Segun trazado final',
+                'purpose': 'Unir tuberias y cerrar laterales.'
+            }
+        ]
+
+        return {
+            'main_pipe_type': main_pipe_type,
+            'main_pipe_diameter_mm': int(pipe_diameter_mm),
+            'pipe_pressure_class': pipe_pressure_class,
+            'lateral_pipe_type': lateral_pipe_type,
+            'lateral_diameter_mm': 16,
+            'valve_type': 'Valvula bola PVC/HDPE',
+            'valve_diameter_mm': int(pipe_diameter_mm),
+            'filter_type': f'Filtro de malla o disco {filter_mesh}',
+            'emitter_type': f'Gotero {emitter_flow_l_h} L/h',
+            'emitter_spacing_m': emitter_spacing_m,
+            'lateral_spacing_m': lateral_spacing_m,
+            'estimated_emitters': estimated_emitters,
+            'estimated_lateral_length_m': round(drip_length_m, 0) if drip_length_m else None,
+            'items': items,
+            'message': 'Listado preliminar de materiales para riego por goteo; ajustar cantidades con plano final, cultivo y marco de plantacion.'
         }
 
     def _hydraulic_recommendation(self, hydraulic_analysis):
@@ -841,18 +1079,20 @@ class ImageAnalysisEndpoint(Resource):
                 f"Riesgo hidraulico {risk}. Perdida estimada "
                 f"{hydraulic_analysis.get('pressure_loss')} kPa considerando desnivel y friccion."
             ),
-            'action': 'Validar caudal, diametro y longitud real; recalcular Hazen-Williams antes de comprar materiales.'
+            'action': 'Validar caudal, diametro y longitud real; recalcular Hazen-Williams antes de comprar componentes.'
         }
 
-    def _water_material_recommendation(self, water_analysis):
+    def _materials_recommendation(self, materials_analysis):
         return {
             'priority': 'Medio',
-            'type': 'Agua y materiales',
+            'type': 'Materiales',
             'message': (
-                f"Perfil de agua referencial: pH {water_analysis['ph']}, "
-                f"salinidad {water_analysis['salinity_ppm']} ppm, dureza {water_analysis['hardness_mg_l']} mg/L."
+                f"Tuberia principal {materials_analysis['main_pipe_type']} "
+                f"{materials_analysis['main_pipe_diameter_mm']} mm "
+                f"{materials_analysis['pipe_pressure_class']} y laterales de goteo "
+                f"{materials_analysis['lateral_diameter_mm']} mm."
             ),
-            'action': f"Material preliminar: {water_analysis['recommended_material']}. Confirmar con analisis de agua real."
+            'action': 'Revisar listado de materiales y ajustar cantidades con el plano definitivo de riego.'
         }
 
     def _build_terrain_limits(self, dem_data, width, height, pixel_size_x, pixel_size_y, area_hectares):
@@ -1104,6 +1344,10 @@ def register_routes(app, api):
             if not os.path.exists(file_path):
                 logger.warning(f"File not found: {file_path}")
                 return {'error': 'Archivo no encontrado'}, 404
+
+            image_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.gif')
+            if filename.lower().endswith(image_extensions):
+                return send_file(file_path)
             
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()

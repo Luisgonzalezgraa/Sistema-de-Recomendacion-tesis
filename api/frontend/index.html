@@ -23,9 +23,12 @@
             <path d="M9.2 14.2c.5 1.4 1.5 2.2 2.8 2.2"></path>
         </symbol>
         <symbol id="icon-materials" viewBox="0 0 24 24">
-            <path d="M9 3h6"></path>
-            <path d="M10 3v5.4l-4.7 8A3 3 0 0 0 7.9 21h8.2a3 3 0 0 0 2.6-4.6l-4.7-8V3"></path>
-            <path d="M7.3 15h9.4"></path>
+            <path d="M4 7h16"></path>
+            <path d="M7 7v10"></path>
+            <path d="M17 7v10"></path>
+            <path d="M5 17h14"></path>
+            <path d="M10 11h4"></path>
+            <path d="M12 9v4"></path>
         </symbol>
         <symbol id="icon-recommendation" viewBox="0 0 24 24">
             <path d="M8 4h8"></path>
@@ -85,11 +88,11 @@
                     <small id="hydraulicStatus">Standby</small>
                 </span>
                     </a>
-                    <a href="#" class="menu-link" onclick="switchTab('agua'); return false;">
+                    <a href="#" class="menu-link" onclick="switchTab('materiales'); return false;">
                 <span class="menu-glyph"><svg><use href="#icon-materials"></use></svg></span>
                 <span>
-                    <strong>Agua y Materiales</strong>
-                    <small id="waterStatus">Standby</small>
+                    <strong>Materiales</strong>
+                    <small id="materialsStatus">Pendiente</small>
                 </span>
                     </a>
                     <a href="#" class="menu-link" onclick="switchTab('diseno'); return false;">
@@ -122,7 +125,7 @@
             <button class="tab-btn active" onclick="switchTab('inicio')">Inicio</button>
             <button class="tab-btn" onclick="switchTab('terreno')">DEM</button>
             <button class="tab-btn" onclick="switchTab('hidraulica')">HID</button>
-            <button class="tab-btn" onclick="switchTab('agua')">MAT</button>
+            <button class="tab-btn" onclick="switchTab('materiales')">MAT</button>
             <button class="tab-btn" onclick="switchTab('diseno')">REC</button>
             <button class="tab-btn" onclick="switchTab('resultados')">REP</button>
             <button class="tab-btn" onclick="switchTab('api')">API</button>
@@ -133,7 +136,7 @@
                 <div>
                     <p class="eyebrow">Panel operativo</p>
                     <h1>Sistema de recomendaci&oacute;n para riego por goteo</h1>
-                    <p>An&aacute;lisis geoespacial, hidr&aacute;ulico y de materiales a partir de imagen territorial.</p>
+                    <p>An&aacute;lisis geoespacial e hidr&aacute;ulico a partir de imagen territorial.</p>
                 </div>
                 <button class="btn btn-primary" onclick="openUploadModal()">Cargar imagen</button>
             </div>
@@ -171,7 +174,7 @@
                         <div class="timeline-step is-ready"><span>01</span><strong>Carga</strong><small>GeoTIFF, TIFF</small></div>
                         <div class="timeline-step"><span>02</span><strong>Terreno</strong><small>pendiente, elevaci&oacute;n y zonas cr&iacute;ticas</small></div>
                         <div class="timeline-step"><span>03</span><strong>Hidr&aacute;ulica</strong><small>presi&oacute;n, caudal y p&eacute;rdida</small></div>
-                        <div class="timeline-step"><span>04</span><strong>Recomendaci&oacute;n</strong><small>materiales y criterios de dise&ntilde;o</small></div>
+                        <div class="timeline-step"><span>04</span><strong>Recomendaci&oacute;n</strong><small>criterios de dise&ntilde;o</small></div>
                     </div>
                 </article>
                 <article class="panel">
@@ -230,12 +233,11 @@
                 </div>
             </div>
             <div class="metric-grid">
-                <article class="metric-card"><span class="metric-label">Presi&oacute;n fuente</span><strong id="hydPressure">--</strong><small>kPa</small></article>
-                <article class="metric-card"><span class="metric-label">Caudal disponible</span><strong id="hydFlow">--</strong><small>L/min</small></article>
-                <article class="metric-card"><span class="metric-label">P&eacute;rdida de carga</span><strong id="hydLoss">--</strong><small>kPa</small></article>
+                <article class="metric-card has-info"><button class="info-btn" onclick="openMetricInfo('pressure')" aria-label="Informacion presion requerida">i</button><span class="metric-label">Presi&oacute;n requerida</span><strong id="hydPressure">--</strong><small>kPa en fuente</small></article>
+                <article class="metric-card has-info"><button class="info-btn" onclick="openMetricInfo('flow')" aria-label="Informacion caudal requerido">i</button><span class="metric-label">Caudal requerido estimado</span><strong id="hydFlow">--</strong><small>L/min</small></article>
+                <article class="metric-card has-info"><button class="info-btn" onclick="openMetricInfo('loss')" aria-label="Informacion perdida de carga">i</button><span class="metric-label">P&eacute;rdida de carga</span><strong id="hydLoss">--</strong><small>kPa</small></article>
                 <article class="metric-card"><span class="metric-label">Riesgo</span><strong id="hydRisk">--</strong><small>clasificaci&oacute;n</small></article>
-                <article class="metric-card"><span class="metric-label">Potencia bomba</span><strong id="hydPumpPower">--</strong><small>HP requeridos</small></article>
-                <article class="metric-card"><span class="metric-label">L&iacute;mite superficie</span><strong id="hydSurfaceLimit">--</strong><small>ha por caudal cat&aacute;logo</small></article>
+                <article class="metric-card has-info"><button class="info-btn" onclick="openMetricInfo('pump')" aria-label="Informacion potencia bomba">i</button><span class="metric-label">Potencia bomba</span><strong id="hydPumpPower">--</strong><small>HP requeridos</small></article>
             </div>
             <div class="dashboard-grid two-columns">
                 <article class="panel">
@@ -252,44 +254,44 @@
                 </article>
             </div>
             <article class="panel">
-                <div class="panel-header"><h2>Cat&aacute;logo referencial de motobombas</h2><span class="pill" id="pumpStatus">Pendiente</span></div>
+                <div class="panel-header"><h2>Motobomba requerida</h2><span class="pill" id="pumpStatus">Pendiente</span></div>
                 <div class="pump-catalog" id="pumpCatalog">
                     <p class="empty-state">Sin evaluaci&oacute;n de motobomba.</p>
                 </div>
             </article>
         </section>
 
-        <section id="agua-tab" class="tab-content">
+        <section id="materiales-tab" class="tab-content">
             <div class="section-heading compact">
                 <div>
                     <p class="eyebrow">MAT</p>
-                    <h1>Agua y Materiales</h1>
-                    <p>Compatibilidad de materiales y calidad estimada del agua.</p>
+                    <h1>Materiales del Sistema</h1>
+                    <p>Listado preliminar de componentes para riego por goteo seg&uacute;n el c&aacute;lculo hidr&aacute;ulico.</p>
                 </div>
             </div>
             <div class="metric-grid">
-                <article class="metric-card"><span class="metric-label">pH</span><strong id="waterPh">--</strong><small>medici&oacute;n/referencia</small></article>
-                <article class="metric-card"><span class="metric-label">Salinidad</span><strong id="waterSalinity">--</strong><small>ppm</small></article>
-                <article class="metric-card"><span class="metric-label">Dureza</span><strong id="waterHardness">--</strong><small>mg/L</small></article>
-                <article class="metric-card"><span class="metric-label">Calidad</span><strong id="waterQuality">--</strong><small>clase</small></article>
+                <article class="metric-card material-summary-card" role="button" tabindex="0" onclick="openMaterialPopup('main_pipe')"><span class="metric-label">Tuber&iacute;a principal</span><strong id="matMainPipe">--</strong><small id="matPipeClass">clase presi&oacute;n</small></article>
+                <article class="metric-card material-summary-card" role="button" tabindex="0" onclick="openMaterialPopup('laterals')"><span class="metric-label">Laterales</span><strong id="matLateralPipe">--</strong><small>goteo</small></article>
+                <article class="metric-card material-summary-card" role="button" tabindex="0" onclick="openMaterialPopup('valves')"><span class="metric-label">Llave de paso</span><strong id="matValve">--</strong><small>por sector</small></article>
+                <article class="metric-card material-summary-card" role="button" tabindex="0" onclick="openMaterialPopup('emitters')"><span class="metric-label">Goteros</span><strong id="matEmitters">--</strong><small>estimados</small></article>
             </div>
             <div class="dashboard-grid two-columns">
                 <article class="panel">
-                    <div class="panel-header"><h2>Qu&iacute;mica del agua</h2><span class="accent cyan"></span></div>
-                    <div class="bar-chart" id="waterChemistryChart">
-                        <p class="empty-state">Sin par&aacute;metros de agua disponibles.</p>
+                    <div class="panel-header"><h2>Componentes base</h2><span class="accent cyan"></span></div>
+                    <div class="materials-list" id="materialsList">
+                        <p class="empty-state">Genera un an&aacute;lisis para ver materiales.</p>
                     </div>
                 </article>
                 <article class="panel">
-                    <div class="panel-header"><h2>Compatibilidad de materiales</h2><span class="accent purple"></span></div>
-                    <div class="compat-grid" id="materialCompatibilityChart">
-                        <p class="empty-state">Sin compatibilidad calculada.</p>
+                    <div class="panel-header"><h2>Criterios de selecci&oacute;n</h2><span class="accent orange"></span></div>
+                    <div class="gauge-grid" id="materialsCriteria">
+                        <p class="empty-state">Sin criterios de materiales calculados.</p>
                     </div>
                 </article>
             </div>
             <article class="panel">
-                <div class="panel-header"><h2>Material recomendado</h2><span class="pill" id="materialStatus">Pendiente</span></div>
-                <p class="panel-copy" id="materialRecommendation">Carga una imagen para generar la recomendaci&oacute;n de material.</p>
+                <div class="panel-header"><h2>Nota de compra</h2><span class="pill" id="materialsNoteStatus">Preliminar</span></div>
+                <p class="panel-copy" id="materialsMessage">Ajustar cantidades con plano final, cultivo y marco de plantaci&oacute;n.</p>
             </article>
         </section>
 
@@ -324,7 +326,10 @@
                 </div>
             </div>
             <article class="panel">
-                <div class="panel-header"><h2>Resumen</h2><span class="pill" id="reportState">Sin reporte</span></div>
+                <div class="panel-header">
+                    <h2>Resumen</h2>
+                    <button class="report-download-btn" id="reportDownloadBtn" onclick="downloadReportPdf()" disabled>Descargar PDF</button>
+                </div>
                 <div id="reportContent" class="report-content">
                     <p class="empty-state">Sube una imagen para generar el reporte del an&aacute;lisis.</p>
                             </div>
@@ -383,6 +388,50 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeUploadModal()">Cancelar</button>
                 <button class="btn btn-primary" id="submitBtn" onclick="submitAnalysis()">Iniciar an&aacute;lisis</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="metricInfoModal" class="modal" aria-hidden="true">
+        <div class="modal-content metric-info-modal" role="dialog" aria-modal="true" aria-labelledby="metricInfoTitle">
+            <div class="modal-header">
+                <h2 id="metricInfoTitle">Par&aacute;metro</h2>
+                <button class="modal-close" onclick="closeMetricInfo()" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="metric-info-copy" id="metricInfoCopy"></p>
+                <div class="settings-grid" id="metricSettings"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="resetHydraulicAssumptions()">Restaurar</button>
+                <button class="btn btn-primary" onclick="saveMetricInfo()">Guardar y recalcular</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pumpListModal" class="modal" aria-hidden="true">
+        <div class="modal-content metric-info-modal" role="dialog" aria-modal="true" aria-labelledby="pumpListTitle">
+            <div class="modal-header">
+                <h2 id="pumpListTitle">Motobombas compatibles</h2>
+                <button class="modal-close" onclick="closePumpList()" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="metric-info-copy" id="pumpListSummary"></p>
+                <div class="pump-list" id="pumpList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="materialPopupModal" class="modal" aria-hidden="true">
+        <div class="modal-content metric-info-modal" role="dialog" aria-modal="true" aria-labelledby="materialPopupTitle">
+            <div class="modal-header">
+                <h2 id="materialPopupTitle">Materiales compatibles</h2>
+                <button class="modal-close" onclick="closeMaterialPopup()" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="material-photo" id="materialPopupPhoto" aria-hidden="true"></div>
+                <p class="metric-info-copy" id="materialPopupCopy"></p>
+                <div class="material-option-list" id="materialPopupList"></div>
             </div>
         </div>
     </div>
