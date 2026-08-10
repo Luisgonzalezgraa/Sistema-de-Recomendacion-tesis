@@ -354,32 +354,6 @@ h1 {
     padding: 14px;
 }
 
-.metric-card.has-info {
-    position: relative;
-    padding-right: 44px;
-}
-
-.info-btn {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 26px;
-    height: 26px;
-    border: 1px solid var(--line);
-    border-radius: 50%;
-    background: rgba(0, 217, 255, 0.06);
-    color: var(--cyan);
-    font-family: Consolas, "Courier New", monospace;
-    font-weight: 800;
-    line-height: 1;
-}
-
-.info-btn:hover {
-    border-color: var(--cyan);
-    background: var(--cyan);
-    color: #03101a;
-}
-
 .metric-label {
     display: block;
     color: var(--muted);
@@ -969,13 +943,16 @@ h1 {
     color: var(--muted);
 }
 
-.material-summary-card {
+.material-summary-card,
+.info-summary-card {
     cursor: pointer;
     transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 
 .material-summary-card:hover,
-.material-summary-card:focus {
+.material-summary-card:focus,
+.info-summary-card:hover,
+.info-summary-card:focus {
     outline: none;
     border-color: rgba(0, 217, 255, 0.62);
     background:
@@ -985,30 +962,36 @@ h1 {
 }
 
 .material-photo {
-    min-height: 230px;
+    min-height: 0;
     margin-bottom: 16px;
     border: 1px solid rgba(0, 217, 255, 0.22);
     border-radius: 10px;
-    background-image: url("/frontend/assets/materials-contact-sheet.png");
-    background-size: 200% 200%;
-    background-repeat: no-repeat;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+        rgba(7, 16, 30, 0.82);
+    padding: 12px;
     box-shadow: 0 18px 45px rgba(0, 0, 0, 0.26);
 }
 
-.material-photo.main-pipe {
-    background-position: 0% 0%;
+.material-photo img {
+    display: block;
+    width: 100%;
+    height: min(280px, 42dvh);
+    object-fit: contain;
+    border-radius: 8px;
+    background: #f4f7fb;
 }
 
-.material-photo.laterals {
-    background-position: 100% 0%;
-}
-
-.material-photo.valves {
-    background-position: 0% 100%;
-}
-
-.material-photo.emitters {
-    background-position: 100% 100%;
+.material-photo a {
+    display: inline-flex;
+    margin-top: 10px;
+    color: var(--cyan);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-decoration: none;
 }
 
 .material-option-list {

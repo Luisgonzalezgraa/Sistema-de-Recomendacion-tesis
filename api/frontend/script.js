@@ -20,11 +20,14 @@ let hydraulicAssumptions = { ...DEFAULT_HYDRAULIC_ASSUMPTIONS };
 let activeMetricInfo = null;
 let currentPumpEvaluation = null;
 let currentMaterials = null;
+const PERCENT_ASSUMPTIONS = new Set(["pressure_safety_factor", "pipe_length_factor"]);
 
 const MATERIAL_POPUPS = {
     main_pipe: {
         title: "Tuberia principal",
-        photoClass: "main-pipe",
+        imageUrl: "https://images.prom.ua/4676789559_w640_h640_truba-dlya-poliva.jpg",
+        imageAlt: "Tuberia HDPE 32 mm real para riego",
+        sourceUrl: "https://prom.ua/p2045721726-truba-dlya-poliva.html",
         copy: "Alternativas para conducir el caudal desde la fuente o motobomba hasta el sector de riego.",
         options: [
             { name: "HDPE para matriz principal", spec: "Recomendado para enterrado o trazados largos; flexible y resistente.", use: "Usar con la clase de presion calculada y diametro del sector." },
@@ -34,7 +37,9 @@ const MATERIAL_POPUPS = {
     },
     laterals: {
         title: "Laterales de goteo",
-        photoClass: "laterals",
+        imageUrl: "https://cdn.salla.sa/NzYZr/c525c3e9-0b3e-4da3-bd3b-8fea8f06a203-1000x1000-EbXyeIqUoixgrxUVRXLDwbv0ftFhS3kUvorWvTcW.png",
+        imageAlt: "Rollo real de tuberia lateral de riego 16 mm",
+        sourceUrl: "https://mygarden.com.sa/ar/AzDwnpZ",
         copy: "Lineas que distribuyen el agua dentro del cultivo y contienen o alimentan los goteros.",
         options: [
             { name: "Tuberia PE 16 mm para goteo", spec: "Lateral reutilizable para goteros insertados o autocompensados.", use: "Buena opcion cuando se necesita mantenimiento y cambio de emisores." },
@@ -44,7 +49,9 @@ const MATERIAL_POPUPS = {
     },
     valves: {
         title: "Llaves de paso",
-        photoClass: "valves",
+        imageUrl: "https://www.keyhole.com.tw/wp-content/uploads/2020/01/KHP-PBV06-2-inch-plastic-ball-valve-socket-connection-sch80_02.jpg",
+        imageAlt: "Valvula bola PVC real para riego",
+        sourceUrl: "https://storage.googleapis.com/dzxtzwuaybacve/irrigation-system-ball-valve.html",
         copy: "Elementos de corte para aislar sectores, limpiar lineas y operar el sistema con seguridad.",
         options: [
             { name: "Valvula bola PVC/HDPE", spec: "Corte manual rapido para matriz o sector.", use: "Debe coincidir con el diametro calculado de la tuberia principal." },
@@ -54,7 +61,9 @@ const MATERIAL_POPUPS = {
     },
     emitters: {
         title: "Goteros y conectores",
-        photoClass: "emitters",
+        imageUrl: "https://cfrouting.zoeysite.com/cdn-cgi/image/format%3Dauto%2Cquality%3D85%2Cfit%3Dscale-down/https%3A//s3.amazonaws.com/zcom-media/sites/a0i0L00000Scsq8QAB/media/catalog/product/d/0/d014-072519-1.jpg",
+        imageAlt: "Gotero real para riego por goteo",
+        sourceUrl: "https://www.dripirrigation.com/d014",
         copy: "Emisores y accesorios que entregan el agua al cultivo y conectan laterales, derivaciones y terminales.",
         options: [
             { name: "Gotero 2 L/h", spec: "Caudal referencial usado en el listado preliminar.", use: "Adecuado para riego localizado de baja descarga." },
@@ -113,6 +122,27 @@ function formatBytes(bytes) {
 function formatUnit(value, unit, decimals = 2) {
     const formatted = formatNumber(value, decimals);
     return formatted === "--" ? "--" : `${formatted}${unit}`;
+}
+
+function factorToPercent(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return "";
+    }
+    return Number(((number - 1) * 100).toFixed(2));
+}
+
+function percentToFactor(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return null;
+    }
+    return 1 + (number / 100);
+}
+
+function formatFactorAsPercent(value, decimals = 0) {
+    const percent = factorToPercent(value);
+    return percent === "" ? "--" : formatUnit(percent, "%", decimals);
 }
 
 function clampPercent(value, max) {
@@ -339,7 +369,7 @@ const metricInfo = {
         copy: "Presion minima estimada en la fuente. Se calcula con presion de operacion del gotero, perdida por desnivel, perdida por friccion y margen de seguridad.",
         fields: [
             ["emitter_operating_pressure_kpa", "Presion gotero", "kPa"],
-            ["pressure_safety_factor", "Margen seguridad", "x"]
+            ["pressure_safety_factor", "Margen seguridad", "%"]
         ]
     },
     flow: {
@@ -357,7 +387,7 @@ const metricInfo = {
         fields: [
             ["hazen_williams_c", "Coeficiente Hazen-Williams", "C"],
             ["minimum_pipe_length_m", "Longitud minima", "m"],
-            ["pipe_length_factor", "Factor longitud", "x"],
+            ["pipe_length_factor", "Margen recorrido", "%"],
             ["pipe_diameter_large_m", "Diametro sector >= 1 ha", "m"],
             ["pipe_diameter_small_m", "Diametro sector < 1 ha", "m"]
         ]
@@ -388,15 +418,20 @@ function openMetricInfo(metricKey) {
     if (copy) {
         copy.textContent = config.copy;
     }
-    settings.innerHTML = config.fields.map(([key, label, unit]) => `
+    settings.innerHTML = config.fields.map(([key, label, unit]) => {
+        const isPercent = PERCENT_ASSUMPTIONS.has(key);
+        const value = isPercent ? factorToPercent(hydraulicAssumptions[key]) : hydraulicAssumptions[key];
+        const step = isPercent ? "1" : "0.001";
+        return `
         <label class="setting-field">
             <span>${label}</span>
             <div>
-                <input type="number" step="0.001" data-assumption="${key}" value="${hydraulicAssumptions[key]}">
+                <input type="number" step="${step}" data-assumption="${key}" data-input-kind="${isPercent ? "percent-factor" : "raw"}" value="${value}">
                 <small>${unit}</small>
             </div>
         </label>
-    `).join("");
+    `;
+    }).join("");
 
     modal.classList.add("active");
     modal.setAttribute("aria-hidden", "false");
@@ -416,7 +451,9 @@ function saveMetricInfo() {
         const key = input.dataset.assumption;
         const value = Number(input.value);
         if (Number.isFinite(value)) {
-            hydraulicAssumptions[key] = value;
+            hydraulicAssumptions[key] = input.dataset.inputKind === "percent-factor"
+                ? percentToFactor(value)
+                : value;
         }
     });
     closeMetricInfo();
@@ -603,7 +640,7 @@ function renderHydraulicCharts(hydraulic) {
     sectorChart.innerHTML = `
         <div class="gauge-card"><span>Sector</span><strong>${formatUnit(hydraulic.design_sector_area, " ha", 2)}</strong><small>area analizada</small></div>
         <div class="gauge-card"><span>Gotero</span><strong>${formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0)}</strong><small>presion base</small></div>
-        <div class="gauge-card"><span>Margen</span><strong>${formatUnit(hydraulic.pressure_safety_factor, "x", 1)}</strong><small>factor seguridad</small></div>
+        <div class="gauge-card"><span>Margen</span><strong>${formatFactorAsPercent(hydraulic.pressure_safety_factor, 0)}</strong><small>seguridad</small></div>
         <div class="gauge-card"><span>Diametro</span><strong>${formatUnit(hydraulic.pipe_diameter, " mm", 0)}</strong><small>tuberia base</small></div>
         <div class="gauge-card"><span>Longitud</span><strong>${formatUnit(hydraulic.pipe_length, " m", 0)}</strong><small>tramo critico</small></div>
         <div class="gauge-card"><span>Presion final</span><strong>${formatUnit(hydraulic.final_pressure, " kPa", 2)}</strong><small>salida estimada</small></div>
@@ -774,7 +811,11 @@ function openMaterialPopup(type) {
         copy.textContent = `${config.copy} Seleccion calculada: ${calculated[type] || "--"}.`;
     }
     if (photo) {
-        photo.className = `material-photo ${config.photoClass}`;
+        photo.className = "material-photo";
+        photo.innerHTML = `
+            <img src="${config.imageUrl}" alt="${config.imageAlt}" loading="lazy">
+            <a href="${config.sourceUrl}" target="_blank" rel="noopener noreferrer">ver imagen/ficha real</a>
+        `;
     }
 
     list.innerHTML = config.options.map(option => `
@@ -855,7 +896,7 @@ function renderReport(data) {
         <div class="report-row"><span>Hidraulica</span><strong>Riesgo ${hydraulic.hydraulic_risk || "--"}, perdida ${formatUnit(hydraulic.pressure_loss, " kPa", 2)}</strong></div>
         <div class="report-row"><span>Motobomba</span><strong>${hydraulic.recommended_pump?.model || "--"}, potencia requerida ${formatUnit(hydraulic.required_pump_power, " HP", 2)}, caudal requerido ${formatUnit(hydraulic.available_flow, " L/min", 2)}</strong></div>
         <div class="report-row"><span>Materiales</span><strong>${materials.main_pipe_type || "--"} ${materials.main_pipe_diameter_mm || "--"} mm, laterales ${materials.lateral_diameter_mm || "--"} mm, llave ${materials.valve_diameter_mm || "--"} mm</strong></div>
-        <div class="report-row"><span>Supuestos</span><strong>${formatUnit(hydraulic.flow_per_hectare, " L/min/ha", 2)}, gotero ${formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0)}, margen ${formatUnit(hydraulic.pressure_safety_factor, "x", 1)}</strong></div>
+        <div class="report-row"><span>Supuestos</span><strong>${formatUnit(hydraulic.flow_per_hectare, " L/min/ha", 2)}, gotero ${formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0)}, margen ${formatFactorAsPercent(hydraulic.pressure_safety_factor, 0)}</strong></div>
         <div class="report-row"><span>Diseno</span><strong>${design.complexity_level || "--"} | costo ${design.estimated_cost_level || "--"}</strong></div>
     `;
 }
@@ -1203,7 +1244,7 @@ function buildReportPdfHtml(data) {
             <div class="pdf-grid">
                 ${reportMetric("Demanda de riego", formatUnit(hydraulic.flow_per_hectare, " L/min/ha", 2))}
                 ${reportMetric("Presion gotero", formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0))}
-                ${reportMetric("Margen seguridad", formatUnit(hydraulic.pressure_safety_factor, "x", 1))}
+                ${reportMetric("Margen seguridad", formatFactorAsPercent(hydraulic.pressure_safety_factor, 0))}
                 ${reportMetric("Rendimiento bomba", formatNumber(hydraulic.assumptions?.pump_efficiency, 2))}
                 ${reportMetric("Diametro tuberia", formatUnit(hydraulic.pipe_diameter, " mm", 0))}
                 ${reportMetric("Longitud critica", formatUnit(hydraulic.pipe_length, " m", 0))}
@@ -1237,7 +1278,8 @@ window.addEventListener("keydown", event => {
 document.addEventListener("keydown", event => {
     const target = event.target;
     if (
-        target?.classList?.contains("material-summary-card") &&
+        (target?.classList?.contains("material-summary-card") ||
+            target?.classList?.contains("info-summary-card")) &&
         (event.key === "Enter" || event.key === " ")
     ) {
         event.preventDefault();

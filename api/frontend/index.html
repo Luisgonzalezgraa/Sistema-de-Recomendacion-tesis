@@ -233,11 +233,11 @@
                 </div>
             </div>
             <div class="metric-grid">
-                <article class="metric-card has-info"><button class="info-btn" onclick="openMetricInfo('pressure')" aria-label="Informacion presion requerida">i</button><span class="metric-label">Presi&oacute;n requerida</span><strong id="hydPressure">--</strong><small>kPa en fuente</small></article>
-                <article class="metric-card has-info"><button class="info-btn" onclick="openMetricInfo('flow')" aria-label="Informacion caudal requerido">i</button><span class="metric-label">Caudal requerido estimado</span><strong id="hydFlow">--</strong><small>L/min</small></article>
-                <article class="metric-card has-info"><button class="info-btn" onclick="openMetricInfo('loss')" aria-label="Informacion perdida de carga">i</button><span class="metric-label">P&eacute;rdida de carga</span><strong id="hydLoss">--</strong><small>kPa</small></article>
+                <article class="metric-card info-summary-card" role="button" tabindex="0" onclick="openMetricInfo('pressure')"><span class="metric-label">Presi&oacute;n requerida</span><strong id="hydPressure">--</strong><small>kPa en fuente</small></article>
+                <article class="metric-card info-summary-card" role="button" tabindex="0" onclick="openMetricInfo('flow')"><span class="metric-label">Caudal requerido estimado</span><strong id="hydFlow">--</strong><small>L/min</small></article>
+                <article class="metric-card info-summary-card" role="button" tabindex="0" onclick="openMetricInfo('loss')"><span class="metric-label">P&eacute;rdida de carga</span><strong id="hydLoss">--</strong><small>kPa</small></article>
                 <article class="metric-card"><span class="metric-label">Riesgo</span><strong id="hydRisk">--</strong><small>clasificaci&oacute;n</small></article>
-                <article class="metric-card has-info"><button class="info-btn" onclick="openMetricInfo('pump')" aria-label="Informacion potencia bomba">i</button><span class="metric-label">Potencia bomba</span><strong id="hydPumpPower">--</strong><small>HP requeridos</small></article>
+                <article class="metric-card info-summary-card" role="button" tabindex="0" onclick="openMetricInfo('pump')"><span class="metric-label">Potencia bomba</span><strong id="hydPumpPower">--</strong><small>HP requeridos</small></article>
             </div>
             <div class="dashboard-grid two-columns">
                 <article class="panel">
