@@ -334,6 +334,47 @@ h1 {
     font-size: 0.92rem;
 }
 
+.section-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.icon-action-btn {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(0, 217, 255, 0.48);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(0, 217, 255, 0.08), transparent),
+        rgba(7, 16, 30, 0.86);
+    color: var(--cyan);
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.icon-action-btn:hover,
+.icon-action-btn:focus {
+    outline: none;
+    background: var(--cyan);
+    border-color: var(--cyan);
+    color: #03101a;
+    transform: translateY(-1px);
+}
+
+.icon-action-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
 .metric-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(160px, 1fr));
@@ -407,6 +448,12 @@ h1 {
     margin-bottom: 16px;
 }
 
+.panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .panel-header h2 {
     font-size: 0.92rem;
     text-transform: uppercase;
@@ -448,6 +495,47 @@ h1 {
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
+}
+
+.mini-action-btn {
+    min-height: 28px;
+    border: 1px solid rgba(0, 217, 255, 0.55);
+    border-radius: 6px;
+    background: rgba(0, 217, 255, 0.08);
+    color: var(--cyan);
+    padding: 0 10px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.66rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.mini-action-btn:hover {
+    background: var(--cyan);
+    color: #03101a;
+    border-color: var(--cyan);
+}
+
+.mini-action-btn:disabled,
+.mini-action-btn:disabled:hover {
+    cursor: not-allowed;
+    opacity: 0.42;
+    border-color: var(--line);
+    background: rgba(93, 125, 171, 0.08);
+    color: var(--muted);
+}
+
+.mini-action-btn.danger {
+    border-color: rgba(255, 77, 93, 0.58);
+    background: rgba(255, 77, 93, 0.08);
+    color: var(--red);
+}
+
+.mini-action-btn.danger:hover {
+    background: var(--red);
+    color: #ffffff;
+    border-color: var(--red);
 }
 
 .report-download-btn:hover:not(:disabled) {
@@ -835,9 +923,139 @@ h1 {
     gap: 12px;
 }
 
+.inventory-list {
+    display: grid;
+    gap: 12px;
+}
+
 .pump-list-card {
     grid-template-columns: minmax(180px, 1.3fr) repeat(3, minmax(120px, 0.85fr));
     align-items: center;
+}
+
+.inventory-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid rgba(93, 125, 171, 0.26);
+    border-radius: 8px;
+    background:
+        linear-gradient(120deg, rgba(0, 217, 255, 0.07), transparent 68%),
+        rgba(7, 16, 30, 0.86);
+}
+
+.selectable-inventory-card {
+    width: 100%;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.inventory-card:hover {
+    border-color: rgba(0, 217, 255, 0.55);
+}
+
+.selectable-inventory-card:hover,
+.selectable-inventory-card:focus {
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.selectable-inventory-card.selected,
+.material-option-card.selected {
+    border-color: rgba(33, 221, 141, 0.72);
+    background:
+        linear-gradient(120deg, rgba(33, 221, 141, 0.12), rgba(0, 217, 255, 0.04)),
+        rgba(7, 16, 30, 0.94);
+    box-shadow: 0 0 0 1px rgba(33, 221, 141, 0.18) inset;
+}
+
+.inventory-card span,
+.inventory-card small {
+    display: block;
+    color: var(--muted);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.inventory-card strong {
+    display: block;
+    margin-top: 4px;
+    color: var(--text);
+    font-family: Consolas, "Courier New", monospace;
+}
+
+.inventory-card p {
+    color: var(--muted);
+}
+
+.inventory-card a {
+    width: fit-content;
+    color: var(--cyan);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+}
+
+.inventory-card a:hover {
+    color: #7cecff;
+}
+
+.selection-state {
+    color: var(--green) !important;
+}
+
+.inventory-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.inventory-specs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.inventory-specs span {
+    min-height: 26px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 9px;
+    border: 1px solid rgba(0, 217, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(0, 217, 255, 0.045);
+    color: #aac0e2;
+}
+
+.material-inventory-card {
+    grid-template-columns: 96px minmax(0, 1fr);
+    align-items: center;
+}
+
+.material-inventory-card img {
+    grid-row: span 4;
+    width: 96px;
+    height: 96px;
+    object-fit: contain;
+    border: 1px solid rgba(0, 217, 255, 0.18);
+    border-radius: 8px;
+    background: #f4f7fb;
+    padding: 8px;
+}
+
+.material-inventory-card p,
+.material-inventory-card a,
+.material-inventory-card .inventory-specs,
+.material-inventory-card .inventory-actions-row {
+    grid-column: 2;
 }
 
 .pump-list-card p {
@@ -919,6 +1137,13 @@ h1 {
     border-radius: 8px;
     background:
         linear-gradient(90deg, rgba(0, 217, 255, 0.055), transparent 72%),
+        var(--surface);
+}
+
+.material-item.selected {
+    border-color: rgba(33, 221, 141, 0.58);
+    background:
+        linear-gradient(90deg, rgba(33, 221, 141, 0.11), transparent 72%),
         var(--surface);
 }
 
@@ -1006,6 +1231,15 @@ h1 {
     background:
         linear-gradient(90deg, rgba(0, 217, 255, 0.055), transparent 72%),
         rgba(7, 16, 30, 0.82);
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.material-option-card:hover,
+.material-option-card:focus {
+    outline: none;
+    border-color: rgba(0, 217, 255, 0.55);
+    transform: translateY(-1px);
 }
 
 .material-option-card span {
@@ -1026,6 +1260,16 @@ h1 {
 .material-option-card p {
     color: var(--muted);
     margin-top: 4px;
+}
+
+.material-option-card small {
+    display: block;
+    margin-top: 8px;
+    color: var(--green);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 
 .recommendation-item,
@@ -1180,6 +1424,10 @@ h1 {
     width: min(680px, 100%);
 }
 
+.feedback-modal-content {
+    width: min(460px, 100%);
+}
+
 .modal-header,
 .modal-footer {
     display: flex;
@@ -1300,7 +1548,9 @@ h1 {
     gap: 10px;
 }
 
-.setting-field input {
+.setting-field input,
+.setting-field select,
+.setting-field textarea {
     width: 100%;
     min-height: 36px;
     border: 1px solid rgba(93, 125, 171, 0.42);
@@ -1311,7 +1561,15 @@ h1 {
     font-family: Consolas, "Courier New", monospace;
 }
 
-.setting-field input:focus {
+.setting-field textarea {
+    min-height: 82px;
+    padding: 9px 10px;
+    resize: vertical;
+}
+
+.setting-field input:focus,
+.setting-field select:focus,
+.setting-field textarea:focus {
     outline: none;
     border-color: var(--cyan);
     box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.12);
@@ -1320,6 +1578,71 @@ h1 {
 .setting-field small {
     color: var(--muted);
     font-family: Consolas, "Courier New", monospace;
+}
+
+.catalog-form {
+    display: grid;
+    gap: 12px;
+}
+
+.catalog-file-field input[type="file"] {
+    padding: 7px 10px;
+}
+
+.catalog-file-field input[type="file"]::file-selector-button {
+    min-height: 26px;
+    margin-right: 10px;
+    border: 1px solid rgba(0, 217, 255, 0.42);
+    border-radius: 6px;
+    background: rgba(0, 217, 255, 0.10);
+    color: var(--cyan);
+    font-family: Consolas, "Courier New", monospace;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+}
+
+.feedback-card {
+    display: grid;
+    gap: 8px;
+    padding: 18px;
+    border: 1px solid rgba(0, 217, 255, 0.22);
+    border-radius: 8px;
+    background:
+        linear-gradient(120deg, rgba(0, 217, 255, 0.075), transparent 70%),
+        rgba(7, 16, 30, 0.86);
+}
+
+.feedback-card.success {
+    border-color: rgba(33, 221, 141, 0.58);
+    background:
+        linear-gradient(120deg, rgba(33, 221, 141, 0.13), transparent 70%),
+        rgba(7, 16, 30, 0.9);
+}
+
+.feedback-card.error {
+    border-color: rgba(255, 77, 93, 0.62);
+    background:
+        linear-gradient(120deg, rgba(255, 77, 93, 0.12), transparent 70%),
+        rgba(7, 16, 30, 0.9);
+}
+
+.feedback-card strong {
+    color: var(--text);
+    font-size: 1.05rem;
+}
+
+.feedback-card.success strong {
+    color: var(--green);
+}
+
+.feedback-card.error strong {
+    color: var(--red);
+}
+
+.feedback-card p {
+    color: #aac0e2;
 }
 
 .modal-footer {
@@ -1576,9 +1899,20 @@ h1 {
         font-size: 0.84rem;
     }
 
-    .section-heading .btn {
+    .section-actions {
         width: 100%;
+        justify-content: stretch;
+    }
+
+    .section-actions .btn {
+        flex: 1;
         min-height: 42px;
+    }
+
+    .icon-action-btn {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
     }
 
     .dashboard-grid,
@@ -1668,9 +2002,23 @@ h1 {
     .recommendation-item,
     .pump-requirement-card,
     .pump-list-card,
+    .material-inventory-card,
     .chart-row,
     .slope-bars {
         grid-template-columns: 1fr;
+    }
+
+    .material-inventory-card img {
+        grid-row: auto;
+        width: 100%;
+        height: 150px;
+    }
+
+    .material-inventory-card p,
+    .material-inventory-card a,
+    .material-inventory-card .inventory-specs,
+    .material-inventory-card .inventory-actions-row {
+        grid-column: auto;
     }
 
     .recommendation-item,

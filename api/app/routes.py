@@ -6,15 +6,38 @@ from flask import request, jsonify, send_file, send_from_directory
 from flask_restful import Resource, reqparse
 import logging
 import os
+import time
+from werkzeug.utils import secure_filename
 from app.models.data_models import GeoPoint, WaterComposition, APIResponse
 from app.modules.geospatial_analyzer import GeospatialAnalyzer
 from app.modules.hydraulic_calculator import HydraulicCalculator
 from app.modules.recommendation_engine import RecommendationEngine
 from app.services.elevation_service import create_elevation_service
+from app.database import add_material, add_pump, delete_material, delete_pump, list_materials, list_pumps
 from config import get_config
 
 logger = logging.getLogger(__name__)
 config = get_config()
+
+CATALOG_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+
+
+def save_catalog_image(file_storage):
+    if not file_storage or not file_storage.filename:
+        return None
+
+    file_ext = os.path.splitext(file_storage.filename)[1].lower()
+    if file_ext not in CATALOG_IMAGE_EXTENSIONS:
+        raise ValueError("La foto del material debe ser JPG, PNG o WEBP.")
+
+    api_root = os.path.dirname(os.path.dirname(__file__))
+    catalog_dir = os.path.join(api_root, "uploads", "catalog")
+    os.makedirs(catalog_dir, exist_ok=True)
+    safe_name = secure_filename(file_storage.filename)
+    filename = f"{int(time.time() * 1000)}_{safe_name}"
+    file_path = os.path.join(catalog_dir, filename)
+    file_storage.save(file_path)
+    return f"/uploads/catalog/{filename}"
 
 
 class HealthCheck(Resource):
@@ -325,6 +348,153 @@ class RecommendationEndpoint(Resource):
             return APIResponse(
                 success=False,
                 message="Error generating recommendations",
+                errors=[str(e)]
+            ).to_dict(), 500
+
+
+class PumpCatalogEndpoint(Resource):
+    """Pump catalog endpoint backed by SQLite"""
+
+    def get(self):
+        return APIResponse(
+            success=True,
+            message="Pump catalog loaded",
+            data=list_pumps()
+        ).to_dict(), 200
+
+    def post(self):
+        try:
+            data = request.get_json() or {}
+            required = ["model", "engine_power_hp", "max_flow_l_min", "max_head_m"]
+            missing = [field for field in required if data.get(field) in (None, "")]
+            if missing:
+                return APIResponse(
+                    success=False,
+                    message=f"Missing required fields: {', '.join(missing)}",
+                    errors=missing
+                ).to_dict(), 400
+
+            pump = add_pump(data)
+            return APIResponse(
+                success=True,
+                message="Pump added to catalog",
+                data=pump
+            ).to_dict(), 201
+        except Exception as e:
+            logger.error(f"Error adding pump: {str(e)}")
+            return APIResponse(
+                success=False,
+                message="Error adding pump to catalog",
+                errors=[str(e)]
+            ).to_dict(), 500
+
+    def delete(self, pump_id=None):
+        if pump_id is None:
+            return APIResponse(
+                success=False,
+                message="Pump id is required",
+                errors=["pump_id"]
+            ).to_dict(), 400
+        try:
+            deleted = delete_pump(pump_id)
+            return APIResponse(
+                success=True,
+                message="Pump deleted from catalog",
+                data=deleted
+            ).to_dict(), 200
+        except ValueError as e:
+            return APIResponse(
+                success=False,
+                message=str(e),
+                errors=[str(e)]
+            ).to_dict(), 404
+        except Exception as e:
+            logger.error(f"Error deleting pump: {str(e)}")
+            return APIResponse(
+                success=False,
+                message="Error deleting pump from catalog",
+                errors=[str(e)]
+            ).to_dict(), 500
+
+
+class MaterialCatalogEndpoint(Resource):
+    """Irrigation material catalog endpoint backed by SQLite"""
+
+    def get(self):
+        material_type = request.args.get("type")
+        return APIResponse(
+            success=True,
+            message="Material catalog loaded",
+            data=list_materials(material_type)
+        ).to_dict(), 200
+
+    def post(self):
+        try:
+            if request.mimetype in ("multipart/form-data", "application/x-www-form-urlencoded"):
+                data = request.form.to_dict()
+                image_url = save_catalog_image(request.files.get("photo")) if request.mimetype == "multipart/form-data" else None
+                if image_url:
+                    data["image_url"] = image_url
+            elif request.is_json:
+                data = request.get_json(silent=True) or {}
+            else:
+                data = {}
+
+            required = ["material_type", "name", "component"]
+            missing = [field for field in required if data.get(field) in (None, "")]
+            if missing:
+                return APIResponse(
+                    success=False,
+                    message=f"Missing required fields: {', '.join(missing)}",
+                    errors=missing
+                ).to_dict(), 400
+
+            material = add_material(data)
+            return APIResponse(
+                success=True,
+                message="Material added to catalog",
+                data=material
+            ).to_dict(), 201
+        except ValueError as e:
+            logger.warning(f"Invalid material input: {str(e)}")
+            return APIResponse(
+                success=False,
+                message=str(e),
+                errors=[str(e)]
+            ).to_dict(), 400
+        except Exception as e:
+            logger.error(f"Error adding material: {str(e)}")
+            return APIResponse(
+                success=False,
+                message="Error adding material to catalog",
+                errors=[str(e)]
+            ).to_dict(), 500
+
+    def delete(self, material_id=None):
+        if material_id is None:
+            return APIResponse(
+                success=False,
+                message="Material id is required",
+                errors=["material_id"]
+            ).to_dict(), 400
+        try:
+            deleted = delete_material(material_id)
+            return APIResponse(
+                success=True,
+                message="Material deleted from catalog",
+                data=deleted
+            ).to_dict(), 200
+        except ValueError as e:
+            return APIResponse(
+                success=False,
+                message=str(e),
+                errors=[str(e)]
+            ).to_dict(), 404
+        except Exception as e:
+            logger.error(f"Error deleting material: {str(e)}")
+            return APIResponse(
+                success=False,
+                message="Error deleting material from catalog",
                 errors=[str(e)]
             ).to_dict(), 500
 
@@ -945,7 +1115,7 @@ class ImageAnalysisEndpoint(Resource):
 
     def _evaluate_pump_catalog(self, required_total_head_m, required_total_pressure_kpa, required_flow_l_min):
         evaluated = []
-        for pump in self.PUMP_CATALOG:
+        for pump in list_pumps():
             meets_flow = pump['max_flow_l_min'] >= required_flow_l_min
             meets_head = (
                 pump['max_head_m'] >= required_total_head_m and
@@ -1066,6 +1236,12 @@ class ImageAnalysisEndpoint(Resource):
             'estimated_emitters': estimated_emitters,
             'estimated_lateral_length_m': round(drip_length_m, 0) if drip_length_m else None,
             'items': items,
+            'catalog_options': {
+                'main_pipe': list_materials('main_pipe'),
+                'laterals': list_materials('laterals'),
+                'valves': list_materials('valves'),
+                'emitters': list_materials('emitters')
+            },
             'message': 'Listado preliminar de materiales para riego por goteo; ajustar cantidades con plano final, cultivo y marco de plantacion.'
         }
 
@@ -1263,6 +1439,10 @@ def register_routes(app, api):
     
     # Recommendations
     api.add_resource(RecommendationEndpoint, '/api/v1/recommendations')
+
+    # Catalogs
+    api.add_resource(PumpCatalogEndpoint, '/api/v1/catalog/pumps', '/api/v1/catalog/pumps/<int:pump_id>')
+    api.add_resource(MaterialCatalogEndpoint, '/api/v1/catalog/materials', '/api/v1/catalog/materials/<int:material_id>')
     
     # Image analysis
     api.add_resource(ImageAnalysisEndpoint, '/api/v1/analyze/image')
@@ -1293,6 +1473,16 @@ def register_routes(app, api):
                     'url': '/api/v1/recommendations',
                     'method': 'POST',
                     'description': 'Generate complete design recommendations'
+                },
+                'pump_catalog': {
+                    'url': '/api/v1/catalog/pumps',
+                    'method': 'GET, POST',
+                    'description': 'List or add pump catalog entries'
+                },
+                'material_catalog': {
+                    'url': '/api/v1/catalog/materials',
+                    'method': 'GET, POST',
+                    'description': 'List or add irrigation material catalog entries'
                 },
                 'image_analysis': {
                     'url': '/api/v1/analyze/image',
@@ -1364,3 +1554,9 @@ def register_routes(app, api):
         except Exception as e:
             logger.error(f"Error serving frontend file: {str(e)}")
             return {'error': str(e)}, 500
+
+    @app.route('/uploads/<path:filename>')
+    def serve_uploads(filename):
+        """Serve uploaded catalog images."""
+        uploads_path = os.path.join(api_root, 'uploads')
+        return send_from_directory(uploads_path, filename)

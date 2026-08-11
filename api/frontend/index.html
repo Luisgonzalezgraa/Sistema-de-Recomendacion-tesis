@@ -138,7 +138,15 @@
                     <h1>Sistema de recomendaci&oacute;n para riego por goteo</h1>
                     <p>An&aacute;lisis geoespacial e hidr&aacute;ulico a partir de imagen territorial.</p>
                 </div>
-                <button class="btn btn-primary" onclick="openUploadModal()">Cargar imagen</button>
+                <div class="section-actions">
+                    <button class="btn btn-primary" onclick="openUploadModal()">Cargar imagen</button>
+                    <button class="icon-action-btn" onclick="openCatalogModal('pump')" title="Agregar motobomba" aria-label="Agregar motobomba">
+                        <svg><use href="#icon-water"></use></svg>
+                    </button>
+                    <button class="icon-action-btn" onclick="openCatalogModal('material')" title="Agregar material" aria-label="Agregar material">
+                        <svg><use href="#icon-materials"></use></svg>
+                    </button>
+                </div>
             </div>
 
             <div class="metric-grid">
@@ -254,7 +262,13 @@
                 </article>
             </div>
             <article class="panel">
-                <div class="panel-header"><h2>Motobomba requerida</h2><span class="pill" id="pumpStatus">Pendiente</span></div>
+                <div class="panel-header">
+                    <h2>Motobomba requerida</h2>
+                    <div class="panel-actions">
+                        <button class="mini-action-btn" onclick="openInventoryModal('pumps')">Ver inventario</button>
+                        <span class="pill" id="pumpStatus">Pendiente</span>
+                    </div>
+                </div>
                 <div class="pump-catalog" id="pumpCatalog">
                     <p class="empty-state">Sin evaluaci&oacute;n de motobomba.</p>
                 </div>
@@ -277,7 +291,10 @@
             </div>
             <div class="dashboard-grid two-columns">
                 <article class="panel">
-                    <div class="panel-header"><h2>Componentes base</h2><span class="accent cyan"></span></div>
+                    <div class="panel-header">
+                        <h2>Componentes base</h2>
+                        <button class="mini-action-btn" onclick="openInventoryModal('materials')">Ver inventario</button>
+                    </div>
                     <div class="materials-list" id="materialsList">
                         <p class="empty-state">Genera un an&aacute;lisis para ver materiales.</p>
                     </div>
@@ -436,12 +453,76 @@
         </div>
     </div>
 
+    <div id="catalogModal" class="modal" aria-hidden="true">
+        <div class="modal-content metric-info-modal" role="dialog" aria-modal="true" aria-labelledby="catalogModalTitle">
+            <div class="modal-header">
+                <h2 id="catalogModalTitle">Agregar al cat&aacute;logo</h2>
+                <button class="modal-close" onclick="closeCatalogModal()" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="metric-info-copy" id="catalogModalCopy"></p>
+                <form class="catalog-form" id="catalogForm" onsubmit="saveCatalogItem(event)"></form>
+            </div>
+        </div>
+    </div>
+
+    <div id="inventoryModal" class="modal" aria-hidden="true">
+        <div class="modal-content metric-info-modal" role="dialog" aria-modal="true" aria-labelledby="inventoryModalTitle">
+            <div class="modal-header">
+                <h2 id="inventoryModalTitle">Inventario</h2>
+                <button class="modal-close" onclick="closeInventoryModal()" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="metric-info-copy" id="inventoryModalCopy"></p>
+                <div class="inventory-list" id="inventoryList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="feedbackModal" class="modal" aria-hidden="true">
+        <div class="modal-content feedback-modal-content" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+            <div class="modal-header">
+                <h2 id="feedbackTitle">Estado</h2>
+                <button class="modal-close" onclick="closeFeedbackModal()" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="feedback-card" id="feedbackCard">
+                    <strong id="feedbackHeadline">--</strong>
+                    <p id="feedbackMessage">--</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeFeedbackModal()">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmActionModal" class="modal" aria-hidden="true">
+        <div class="modal-content feedback-modal-content" role="dialog" aria-modal="true" aria-labelledby="confirmActionTitle">
+            <div class="modal-header">
+                <h2 id="confirmActionTitle">Confirmar</h2>
+                <button class="modal-close" onclick="closeConfirmAction()" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="feedback-card" id="confirmActionCard">
+                    <strong id="confirmActionHeadline">--</strong>
+                    <p id="confirmActionMessage">--</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelConfirmActionBtn" onclick="closeConfirmAction()">No</button>
+                <button class="btn btn-primary" id="confirmActionBtn" onclick="runConfirmedAction()">Si</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/frontend/script.js"></script>
     <script>
         // Sincronizar menú y tabs al cargar
         window.addEventListener('load', function() {
             switchTab('inicio');
             checkHealth();
+            loadCatalogs();
         });
 
         // Auto refresh cada 30 segundos

@@ -33,6 +33,10 @@ def create_app(config_name='development'):
     # Initialize extensions
     CORS(app)
     api = Api(app)
+
+    # Initialize local catalog database
+    from app.database import init_db
+    init_db()
     
     # Register blueprints and routes
     from app.routes import register_routes

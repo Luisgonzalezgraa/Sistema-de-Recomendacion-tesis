@@ -1,6 +1,8 @@
 const API_URL = "http://localhost:5000";
 const HEALTH_ENDPOINT = "/api/v1/health";
 const DOCS_ENDPOINT = "/api/v1/docs";
+const PUMPS_ENDPOINT = "/api/v1/catalog/pumps";
+const MATERIALS_ENDPOINT = "/api/v1/catalog/materials";
 
 const DEFAULT_HYDRAULIC_ASSUMPTIONS = {
     flow_per_hectare_l_min: 35,
@@ -20,6 +22,18 @@ let hydraulicAssumptions = { ...DEFAULT_HYDRAULIC_ASSUMPTIONS };
 let activeMetricInfo = null;
 let currentPumpEvaluation = null;
 let currentMaterials = null;
+let catalogMode = null;
+let activeMaterialPopupType = null;
+let pumpCatalogData = [];
+let materialCatalog = {
+    main_pipe: [],
+    laterals: [],
+    valves: [],
+    emitters: []
+};
+let selectedPumpId = null;
+let selectedMaterialIds = new Set();
+let pendingConfirmedAction = null;
 const PERCENT_ASSUMPTIONS = new Set(["pressure_safety_factor", "pipe_length_factor"]);
 
 const MATERIAL_POPUPS = {
@@ -162,6 +176,82 @@ function formatTime(date) {
     });
 }
 
+function showFeedback(type, headline, message) {
+    const modal = $("feedbackModal");
+    const title = $("feedbackTitle");
+    const card = $("feedbackCard");
+    const headlineEl = $("feedbackHeadline");
+    const messageEl = $("feedbackMessage");
+    if (!modal || !card) {
+        alert(`${headline}\n${message}`);
+        return;
+    }
+
+    if (title) {
+        title.textContent = type === "success" ? headline : "No se pudo cargar";
+    }
+    if (headlineEl) {
+        headlineEl.textContent = headline;
+    }
+    if (messageEl) {
+        messageEl.textContent = message;
+    }
+    card.classList.remove("success", "error");
+    card.classList.add(type === "success" ? "success" : "error");
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function closeFeedbackModal() {
+    const modal = $("feedbackModal");
+    if (modal) {
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
+    }
+}
+
+function showConfirmAction({ title, headline, message, confirmText = "Confirmar", tone = "success", onConfirm }) {
+    const modal = $("confirmActionModal");
+    const titleEl = $("confirmActionTitle");
+    const card = $("confirmActionCard");
+    const headlineEl = $("confirmActionHeadline");
+    const messageEl = $("confirmActionMessage");
+    const button = $("confirmActionBtn");
+    const cancelButton = $("cancelConfirmActionBtn");
+    if (!modal || !card || typeof onConfirm !== "function") {
+        return;
+    }
+
+    pendingConfirmedAction = onConfirm;
+    if (titleEl) titleEl.textContent = title;
+    if (headlineEl) headlineEl.textContent = headline;
+    if (messageEl) messageEl.textContent = message;
+    if (button) button.textContent = confirmText;
+    if (cancelButton) cancelButton.textContent = "No";
+    card.classList.remove("success", "error");
+    card.classList.add(tone === "error" ? "error" : "success");
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function closeConfirmAction() {
+    const modal = $("confirmActionModal");
+    if (modal) {
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
+    }
+    pendingConfirmedAction = null;
+}
+
+async function runConfirmedAction() {
+    const action = pendingConfirmedAction;
+    pendingConfirmedAction = null;
+    closeConfirmAction();
+    if (typeof action === "function") {
+        await action();
+    }
+}
+
 async function checkHealth() {
     setText("statusBadge", "Verificando");
     setText("systemStatus", "Conectando");
@@ -240,6 +330,279 @@ function setLoadingState(isLoading) {
 async function openApiDocs() {
     const response = await fetch(`${API_URL}${DOCS_ENDPOINT}`);
     return response.json();
+}
+
+async function loadCatalogs() {
+    try {
+        const [pumpResponse, materialResponse] = await Promise.all([
+            fetch(`${API_URL}${PUMPS_ENDPOINT}`),
+            fetch(`${API_URL}${MATERIALS_ENDPOINT}`)
+        ]);
+
+        if (pumpResponse.ok) {
+            const pumpPayload = await pumpResponse.json();
+            pumpCatalogData = pumpPayload.data || [];
+        }
+
+        if (materialResponse.ok) {
+            const payload = await materialResponse.json();
+            const grouped = {
+                main_pipe: [],
+                laterals: [],
+                valves: [],
+                emitters: []
+            };
+            (payload.data || []).forEach(item => {
+                if (grouped[item.material_type]) {
+                    grouped[item.material_type].push(item);
+                }
+            });
+            materialCatalog = grouped;
+        }
+    } catch (error) {
+        console.warn("No se pudo cargar catalogos", error);
+    }
+}
+
+function allMaterialCatalogItems() {
+    return Object.entries(materialCatalog).flatMap(([type, items]) =>
+        (items || []).map(item => ({ ...item, material_type: item.material_type || type }))
+    );
+}
+
+function materialTypeLabel(type) {
+    const labels = {
+        main_pipe: "Tuberia principal",
+        laterals: "Laterales",
+        valves: "Llaves de paso",
+        emitters: "Goteros/conectores"
+    };
+    return labels[type] || "Material";
+}
+
+function hasAnalyzedImage() {
+    return Boolean(window.analysisResults);
+}
+
+function selectionDisabledAttr() {
+    return hasAnalyzedImage()
+        ? ""
+        : 'disabled title="Carga y analiza una imagen antes de seleccionar"';
+}
+
+async function openInventoryModal(kind) {
+    const modal = $("inventoryModal");
+    const title = $("inventoryModalTitle");
+    const copy = $("inventoryModalCopy");
+    const list = $("inventoryList");
+    if (!modal || !list) {
+        return;
+    }
+
+    await loadCatalogs();
+
+    if (kind === "pumps") {
+        if (title) title.textContent = "Inventario de motobombas";
+        if (copy) copy.textContent = "Listado completo guardado en la base de datos. La recomendacion calculada usa estos registros para comparar caudal, altura y presion.";
+
+        if (!pumpCatalogData.length) {
+            list.innerHTML = '<p class="empty-state">No hay motobombas registradas en el inventario.</p>';
+        } else {
+            list.innerHTML = pumpCatalogData.map(pump => `
+                <article class="inventory-card selectable-inventory-card ${Number(selectedPumpId) === Number(pump.id) ? "selected" : ""}">
+                    <div>
+                        <span>${pump.type || "Motobomba"}</span>
+                        <strong>${pump.model || "--"}</strong>
+                        <small>${pump.engine || "Motor no declarado"} | ${formatUnit(pump.engine_power_hp, " HP", 1)}</small>
+                    </div>
+                    <div class="inventory-specs">
+                        <span>Caudal ${formatUnit(pump.max_flow_l_min, " L/min", 0)}</span>
+                        <span>Altura ${formatUnit(pump.max_head_m, " m", 1)}</span>
+                        <span>Presion ${formatUnit(pump.max_pressure_kpa, " kPa", 0)}</span>
+                    </div>
+                    <small class="selection-state">${Number(selectedPumpId) === Number(pump.id) ? "Seleccionada" : "Disponible para seleccionar"}</small>
+                    ${pump.source_url ? `<a href="${pump.source_url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${pump.source || "ver ficha"}</a>` : `<small>${pump.source || "Catalogo interno"}</small>`}
+                    <div class="inventory-actions-row">
+                        <button class="mini-action-btn" ${selectionDisabledAttr()} onclick="selectInventoryItem('pump', ${pump.id}); event.stopPropagation();">Seleccionar</button>
+                        <button class="mini-action-btn danger" onclick="confirmDeleteInventoryItem('pump', ${pump.id}); event.stopPropagation();">Eliminar</button>
+                    </div>
+                </article>
+            `).join("");
+        }
+    } else {
+        const materials = allMaterialCatalogItems();
+        if (title) title.textContent = "Inventario de materiales";
+        if (copy) copy.textContent = "Listado completo de materiales registrados para riego por goteo. Las tarjetas de Materiales muestran opciones desde este inventario.";
+
+        if (!materials.length) {
+            list.innerHTML = '<p class="empty-state">No hay materiales registrados en el inventario.</p>';
+        } else {
+            list.innerHTML = materials.map(item => `
+                <article class="inventory-card selectable-inventory-card material-inventory-card ${selectedMaterialIds.has(String(item.id)) ? "selected" : ""}">
+                    ${item.image_url ? `<img src="${item.image_url}" alt="${item.name || item.component || "Material"}" loading="lazy">` : ""}
+                    <div>
+                        <span>${materialTypeLabel(item.material_type)}</span>
+                        <strong>${item.name || "--"}</strong>
+                        <small>${item.component || "Componente no declarado"}</small>
+                    </div>
+                    <div class="inventory-specs">
+                        ${item.diameter_mm ? `<span>Diametro ${formatUnit(item.diameter_mm, " mm", 0)}</span>` : ""}
+                        ${item.pressure_class ? `<span>${item.pressure_class}</span>` : ""}
+                    </div>
+                    <p>${item.use_case || item.description || ""}</p>
+                    <small class="selection-state">${selectedMaterialIds.has(String(item.id)) ? "Seleccionado" : "Disponible para seleccionar"}</small>
+                    ${item.source_url ? `<a href="${item.source_url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">ver ficha</a>` : ""}
+                    <div class="inventory-actions-row">
+                        <button class="mini-action-btn" ${selectionDisabledAttr()} onclick="selectInventoryItem('material', ${item.id}, '${item.material_type}'); event.stopPropagation();">${selectedMaterialIds.has(String(item.id)) ? "Quitar" : "Seleccionar"}</button>
+                        <button class="mini-action-btn danger" onclick="confirmDeleteInventoryItem('material', ${item.id}, '${item.material_type}'); event.stopPropagation();">Eliminar</button>
+                    </div>
+                </article>
+            `).join("");
+        }
+    }
+
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function closeInventoryModal() {
+    const modal = $("inventoryModal");
+    if (modal) {
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
+    }
+}
+
+function selectInventoryItem(kind, id, materialType = "") {
+    if (!hasAnalyzedImage()) {
+        showFeedback("error", "Primero carga una imagen", "Puedes seguir agregando materiales y motobombas al inventario, pero para seleccionar necesitas cargar y analizar una imagen.");
+        return;
+    }
+
+    if (kind === "pump") {
+        selectedPumpId = Number(id);
+        const selected = pumpCatalogData.find(pump => Number(pump.id) === Number(id));
+        setText("pumpStatus", "Seleccionada");
+        setText("footerProgress", selected ? `motobomba: ${selected.model}` : "motobomba seleccionada");
+        closeInventoryModal();
+        closePumpList();
+        closeMaterialPopup();
+        applySelectedRecommendations();
+        showFeedback("success", "Seleccion exitosa", "La motobomba seleccionada quedo aplicada a la recomendacion.");
+        return;
+    }
+
+    const key = String(id);
+    if (selectedMaterialIds.has(key)) {
+        selectedMaterialIds.delete(key);
+    } else {
+        selectedMaterialIds.add(key);
+    }
+    setText("materialsNoteStatus", selectedMaterialIds.size ? `${selectedMaterialIds.size} seleccionados` : "Preliminar");
+    setText("footerProgress", selectedMaterialIds.size ? "materiales seleccionados" : "catalogo actualizado");
+    closeInventoryModal();
+    closePumpList();
+    closeMaterialPopup();
+    applySelectedRecommendations();
+    showFeedback("success", "Seleccion exitosa", "Los materiales seleccionados quedaron aplicados a la recomendacion.");
+}
+
+function confirmDeleteInventoryItem(kind, id, materialType = "") {
+    showConfirmAction({
+        title: "Confirmar eliminacion",
+        headline: "¿Esta seguro de eliminar?",
+        message: "Si confirmas, el registro se quitara del inventario.",
+        confirmText: "Si",
+        tone: "error",
+        onConfirm: () => deleteInventoryItem(kind, id, materialType)
+    });
+}
+
+async function deleteInventoryItem(kind, id, materialType = "") {
+    const endpoint = kind === "pump" ? `${PUMPS_ENDPOINT}/${id}` : `${MATERIALS_ENDPOINT}/${id}`;
+    try {
+        const response = await fetch(`${API_URL}${endpoint}`, { method: "DELETE" });
+        const result = await response.json();
+        if (!response.ok) {
+            const details = Array.isArray(result.errors) && result.errors.length
+                ? result.errors.join(" ")
+                : result.message;
+            throw new Error(details || "No se pudo eliminar el registro.");
+        }
+
+        if (kind === "pump" && Number(selectedPumpId) === Number(id)) {
+            selectedPumpId = null;
+        }
+        if (kind === "material") {
+            selectedMaterialIds.delete(String(id));
+        }
+
+        await loadCatalogs();
+        applySelectedRecommendations();
+        closeInventoryModal();
+        closePumpList();
+        closeMaterialPopup();
+    } catch (error) {
+        showFeedback("error", "No se pudo eliminar", error.message || "Ocurrio un problema al eliminar el registro.");
+    }
+}
+
+function selectedMaterialItems() {
+    return allMaterialCatalogItems().filter(item => selectedMaterialIds.has(String(item.id)));
+}
+
+function evaluateSelectedPump(pump, spec) {
+    if (!pump || !spec) {
+        return pump;
+    }
+    const requiredFlow = Number(spec.required_flow_l_min) || 0;
+    const requiredHead = Number(spec.required_head_m) || 0;
+    const requiredPressure = Number(spec.required_pressure_kpa) || 0;
+    const meetsFlow = Number(pump.max_flow_l_min) >= requiredFlow;
+    const meetsHead = Number(pump.max_head_m) >= requiredHead && Number(pump.max_pressure_kpa) >= requiredPressure;
+    return {
+        ...pump,
+        meets_flow: meetsFlow,
+        meets_head: meetsHead,
+        meets_requirements: meetsFlow && meetsHead,
+        flow_margin_l_min: Number(pump.max_flow_l_min) - requiredFlow,
+        head_margin_m: Number(pump.max_head_m) - requiredHead,
+        selection_note: meetsFlow && meetsHead
+            ? "Seleccionada por el usuario y compatible con el requerimiento calculado."
+            : "Seleccionada por el usuario; revisar porque no cumple completamente caudal y/o altura requerida."
+    };
+}
+
+function applySelectedRecommendations() {
+    if (selectedPumpId && currentPumpEvaluation?.spec) {
+        const selected = pumpCatalogData.find(pump => Number(pump.id) === Number(selectedPumpId));
+        if (selected) {
+            const evaluated = evaluateSelectedPump(selected, currentPumpEvaluation.spec);
+            renderPumpCatalog({
+                pump_catalog: currentPumpEvaluation.catalog || [],
+                recommended_pump: evaluated,
+                required_pump_spec: currentPumpEvaluation.spec
+            });
+            setText("pumpStatus", evaluated.meets_requirements ? "Seleccionada compatible" : "Seleccionada revisar");
+        }
+    }
+
+    const selectedMaterials = selectedMaterialItems();
+    if (selectedMaterials.length) {
+        const list = $("materialsList");
+        if (list) {
+            list.innerHTML = selectedMaterials.map(item => `
+                <article class="material-item selected">
+                    <span>${materialTypeLabel(item.material_type)}</span>
+                    <strong>${item.component || item.name || "--"}</strong>
+                    <small>${item.pressure_class || (item.diameter_mm ? `${formatUnit(item.diameter_mm, " mm", 0)}` : "seleccionado")}</small>
+                    <p>${item.use_case || item.description || item.name || ""}</p>
+                </article>
+            `).join("");
+        }
+        setText("materialsNoteStatus", `${selectedMaterials.length} seleccionados`);
+        setText("materialsMessage", "Recomendacion ajustada con los materiales seleccionados desde el inventario.");
+    }
 }
 
 function switchTab(tabName) {
@@ -324,10 +687,10 @@ function handleFileSelect(event) {
     }
 }
 
-async function submitAnalysis(targetTab = "terreno") {
+async function submitAnalysis(targetTab = "terreno", showSuccessPopup = true) {
     const file = $("fileInput")?.files[0] || window.selectedAnalysisFile;
     if (!file) {
-        alert("Selecciona una imagen antes de iniciar el analisis.");
+        showFeedback("error", "Falta seleccionar archivo", "Selecciona una imagen territorial antes de iniciar el analisis.");
         return;
     }
 
@@ -355,8 +718,12 @@ async function submitAnalysis(targetTab = "terreno") {
         displayAnalysisResults(data.data);
         closeUploadModal();
         switchTab(targetTab);
+        if (showSuccessPopup) {
+            showFeedback("success", "Carga exitosa", "La imagen se proceso correctamente y el analisis hidraulico quedo actualizado.");
+        }
     } catch (error) {
-        alert(`Error al enviar el archivo:\n${error.message}`);
+        openUploadModal();
+        showFeedback("error", "No se pudo cargar la imagen", error.message || "Ocurrio un problema al procesar el archivo. Revisa el formato e intenta nuevamente.");
         setText("footerState", "Error analisis");
     } finally {
         setLoadingState(false);
@@ -524,6 +891,7 @@ function displayAnalysisResults(analysisData) {
     renderMaterials(materials);
     renderRecommendations(design.recommendations || []);
     renderReport(analysisData);
+    applySelectedRecommendations();
 }
 
 function renderTerrainCharts(terrain) {
@@ -694,6 +1062,48 @@ function renderPumpCatalog(hydraulic) {
     `;
 }
 
+function refreshPumpEvaluationFromLocalCatalog() {
+    if (!currentPumpEvaluation?.spec || !pumpCatalogData.length) {
+        return;
+    }
+
+    const spec = currentPumpEvaluation.spec;
+    const catalog = pumpCatalogData.map(pump => {
+        const meetsFlow = Number(pump.max_flow_l_min) >= Number(spec.required_flow_l_min);
+        const meetsHead = (
+            Number(pump.max_head_m) >= Number(spec.required_head_m) &&
+            Number(pump.max_pressure_kpa) >= Number(spec.required_pressure_kpa)
+        );
+        return {
+            ...pump,
+            meets_flow: meetsFlow,
+            meets_head: meetsHead,
+            meets_requirements: meetsFlow && meetsHead,
+            flow_margin_l_min: Number(pump.max_flow_l_min) - Number(spec.required_flow_l_min),
+            head_margin_m: Number(pump.max_head_m) - Number(spec.required_head_m),
+            selection_note: meetsFlow && meetsHead
+                ? "Cumple caudal y altura/presion requeridos para el terreno analizado."
+                : "No cumple completamente el caudal y/o la altura requerida; revisar alternativa de mayor capacidad."
+        };
+    }).sort((a, b) => (
+        Number(!a.meets_requirements) - Number(!b.meets_requirements) ||
+        Number(!a.meets_head) - Number(!b.meets_head) ||
+        Number(!a.meets_flow) - Number(!b.meets_flow) ||
+        Number(a.engine_power_hp) - Number(b.engine_power_hp) ||
+        Number(a.max_flow_l_min) - Number(b.max_flow_l_min)
+    ));
+
+    const matching = catalog.filter(pump => pump.meets_requirements);
+    const recommended = matching[0] || catalog[catalog.length - 1] || null;
+    currentPumpEvaluation = { catalog, matching, recommended, spec };
+
+    renderPumpCatalog({
+        pump_catalog: catalog,
+        recommended_pump: recommended,
+        required_pump_spec: spec
+    });
+}
+
 function openPumpList() {
     const modal = $("pumpListModal");
     const list = $("pumpList");
@@ -723,6 +1133,10 @@ function openPumpList() {
             <div><span>Altura max.</span><strong>${formatUnit(pump.max_head_m, " m", 1)}</strong><small>margen ${formatUnit(pump.head_margin_m, " m", 2)}</small></div>
             <div><span>Fuente</span><strong>${pump.source || "Catalogo"}</strong><small><a href="${pump.source_url}" target="_blank" rel="noopener noreferrer">ver ficha</a></small></div>
             <p>${pump.selection_note || ""}</p>
+            <div class="inventory-actions-row">
+                <button class="mini-action-btn" ${selectionDisabledAttr()} onclick="selectInventoryItem('pump', ${pump.id})">Seleccionar</button>
+                <button class="mini-action-btn danger" onclick="confirmDeleteInventoryItem('pump', ${pump.id})">Eliminar</button>
+            </div>
         </article>
     `).join("");
 
@@ -751,6 +1165,12 @@ function renderMaterials(materials) {
         return;
     }
     currentMaterials = materials;
+    if (materials.catalog_options) {
+        materialCatalog = {
+            ...materialCatalog,
+            ...materials.catalog_options
+        };
+    }
 
     setText("matMainPipe", `${materials.main_pipe_type || "--"} ${materials.main_pipe_diameter_mm || "--"} mm`);
     setText("matPipeClass", materials.pipe_pressure_class || "clase presion");
@@ -795,6 +1215,7 @@ function openMaterialPopup(type) {
     if (!config || !modal || !list) {
         return;
     }
+    activeMaterialPopupType = type;
 
     const materials = currentMaterials || {};
     const calculated = {
@@ -810,19 +1231,37 @@ function openMaterialPopup(type) {
     if (copy) {
         copy.textContent = `${config.copy} Seleccion calculada: ${calculated[type] || "--"}.`;
     }
+    const dbOptions = materialCatalog[type] || [];
+    const options = dbOptions.length
+        ? dbOptions.map(item => ({
+            id: item.id,
+            material_type: item.material_type || type,
+            name: item.name,
+            spec: item.component,
+            use: item.use_case || item.description || "",
+            imageUrl: item.image_url,
+            sourceUrl: item.source_url
+        }))
+        : config.options;
+
+    const firstImage = options.find(option => option.imageUrl)?.imageUrl || config.imageUrl;
+    const firstSource = options.find(option => option.sourceUrl)?.sourceUrl || config.sourceUrl;
+
     if (photo) {
         photo.className = "material-photo";
         photo.innerHTML = `
-            <img src="${config.imageUrl}" alt="${config.imageAlt}" loading="lazy">
-            <a href="${config.sourceUrl}" target="_blank" rel="noopener noreferrer">ver imagen/ficha real</a>
+            <img src="${firstImage}" alt="${config.imageAlt}" loading="lazy">
+            <a href="${firstSource}" target="_blank" rel="noopener noreferrer">ver imagen/ficha real</a>
         `;
     }
 
-    list.innerHTML = config.options.map(option => `
-        <article class="material-option-card">
+    list.innerHTML = options.map(option => `
+        <article class="material-option-card ${option.id && selectedMaterialIds.has(String(option.id)) ? "selected" : ""}">
             <span>${option.name}</span>
             <strong>${option.spec}</strong>
             <p>${option.use}</p>
+            ${option.id ? `<small>${selectedMaterialIds.has(String(option.id)) ? "Seleccionado" : "Tocar para seleccionar"}</small>` : ""}
+            ${option.id ? `<div class="inventory-actions-row"><button class="mini-action-btn" ${selectionDisabledAttr()} onclick="selectInventoryItem('material', ${option.id}, '${option.material_type || type}')">${selectedMaterialIds.has(String(option.id)) ? "Quitar" : "Seleccionar"}</button></div>` : ""}
         </article>
     `).join("");
 
@@ -835,6 +1274,173 @@ function closeMaterialPopup() {
     if (modal) {
         modal.classList.remove("active");
         modal.setAttribute("aria-hidden", "true");
+    }
+    activeMaterialPopupType = null;
+}
+
+function openCatalogModal(mode) {
+    catalogMode = mode;
+    const modal = $("catalogModal");
+    const title = $("catalogModalTitle");
+    const copy = $("catalogModalCopy");
+    const form = $("catalogForm");
+    if (!modal || !form) {
+        return;
+    }
+
+    if (mode === "pump") {
+        if (title) title.textContent = "Agregar motobomba";
+        if (copy) copy.textContent = "Registra una motobomba nueva para que el selector la evalúe contra caudal, altura y presión requerida.";
+        form.innerHTML = `
+            ${catalogInput("model", "Modelo", "Honda WH20", true)}
+            ${catalogInput("type", "Tipo", "Alta presion 2 pulg.", false)}
+            ${catalogInput("engine", "Motor", "GX160", false)}
+            ${catalogInput("engine_power_hp", "Potencia motor", "4.8", true, "number", "HP")}
+            ${catalogInput("max_flow_l_min", "Caudal maximo", "450", true, "number", "L/min")}
+            ${catalogInput("max_head_m", "Altura maxima", "45", true, "number", "m")}
+            ${catalogInput("max_pressure_kpa", "Presion maxima", "441", false, "number", "kPa")}
+            ${catalogInput("source", "Fuente", "Ficha tecnica fabricante", false)}
+            ${catalogInput("source_url", "URL fuente", "https://...", false, "url")}
+            <button class="btn btn-primary" type="submit">Guardar motobomba</button>
+        `;
+    } else {
+        if (title) title.textContent = "Agregar material";
+        if (copy) copy.textContent = "Registra materiales para que aparezcan en los popups del módulo Materiales.";
+        form.innerHTML = `
+            <label class="setting-field">
+                <span>Tipo material</span>
+                <div>
+                    <select name="material_type" required>
+                        <option value="main_pipe">Tuberia principal</option>
+                        <option value="laterals">Laterales</option>
+                        <option value="valves">Llaves de paso</option>
+                        <option value="emitters">Goteros/conectores</option>
+                    </select>
+                    <small>categoria</small>
+                </div>
+            </label>
+            ${catalogInput("name", "Nombre", "HDPE matriz principal", true)}
+            ${catalogInput("component", "Componente", "HDPE 40 mm PN 6", true)}
+            ${catalogInput("diameter_mm", "Diametro", "40", false, "number", "mm")}
+            ${catalogInput("pressure_class", "Clase presion", "PN 6", false)}
+            ${catalogTextarea("description", "Descripcion", "Material recomendado para matriz principal.")}
+            ${catalogTextarea("use_case", "Uso", "Conducir el caudal al sector de riego.")}
+            ${catalogFileInput("photo", "Foto del material", "JPG, PNG o WEBP")}
+            ${catalogInput("source_url", "URL ficha", "https://...", false, "url")}
+            <button class="btn btn-primary" type="submit">Guardar material</button>
+        `;
+    }
+
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function catalogInput(name, label, placeholder, required = false, type = "text", unit = "") {
+    return `
+        <label class="setting-field">
+            <span>${label}</span>
+            <div>
+                <input name="${name}" type="${type}" step="0.001" placeholder="${placeholder}" ${required ? "required" : ""}>
+                <small>${unit || (required ? "requerido" : "opcional")}</small>
+            </div>
+        </label>
+    `;
+}
+
+function catalogTextarea(name, label, placeholder) {
+    return `
+        <label class="setting-field">
+            <span>${label}</span>
+            <div>
+                <textarea name="${name}" placeholder="${placeholder}"></textarea>
+                <small>opcional</small>
+            </div>
+        </label>
+    `;
+}
+
+function catalogFileInput(name, label, hint) {
+    return `
+        <label class="setting-field catalog-file-field">
+            <span>${label}</span>
+            <div>
+                <input name="${name}" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onchange="handleCatalogPhotoSelect(event)">
+                <small id="catalogPhotoHint">${hint}</small>
+            </div>
+        </label>
+    `;
+}
+
+function handleCatalogPhotoSelect(event) {
+    const file = event.target.files?.[0];
+    const hint = $("catalogPhotoHint");
+    if (hint && file) {
+        hint.textContent = `${file.name} | ${formatBytes(file.size)}`;
+    }
+}
+
+function closeCatalogModal() {
+    const modal = $("catalogModal");
+    if (modal) {
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
+    }
+}
+
+async function saveCatalogItem(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const endpoint = catalogMode === "pump" ? PUMPS_ENDPOINT : MATERIALS_ENDPOINT;
+    try {
+        let response;
+        if (catalogMode === "pump") {
+            const payload = Object.fromEntries(formData.entries());
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === "") {
+                    delete payload[key];
+                }
+            });
+            response = await fetch(`${API_URL}${endpoint}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            response = await fetch(`${API_URL}${endpoint}`, {
+                method: "POST",
+                body: formData
+            });
+        }
+
+        const result = await response.json();
+        if (!response.ok) {
+            const details = Array.isArray(result.errors) && result.errors.length
+                ? result.errors.join(" ")
+                : result.message;
+            throw new Error(details || "No se pudo guardar el registro.");
+        }
+
+        const savedMode = catalogMode;
+        closeCatalogModal();
+        await loadCatalogs();
+
+        if (currentMaterials) {
+            currentMaterials.catalog_options = materialCatalog;
+            renderMaterials(currentMaterials);
+        }
+
+        if (window.selectedAnalysisFile) {
+            await submitAnalysis(savedMode === "pump" ? "hidraulica" : "materiales", false);
+        } else if (savedMode === "pump") {
+            refreshPumpEvaluationFromLocalCatalog();
+        }
+        closePumpList();
+        setText("footerProgress", "catalogo actualizado");
+        showFeedback("success", "Carga exitosa", savedMode === "pump"
+            ? "La motobomba quedo guardada en el inventario y ya puede seleccionarse."
+            : "El material quedo guardado con su foto en el inventario.");
+    } catch (error) {
+        showFeedback("error", "No se pudo cargar el registro", error.message || "Revisa los campos e intenta nuevamente.");
     }
 }
 
@@ -1268,6 +1874,10 @@ function buildReportPdfHtml(data) {
 
 window.addEventListener("keydown", event => {
     if (event.key === "Escape") {
+        closeConfirmAction();
+        closeFeedbackModal();
+        closeInventoryModal();
+        closeCatalogModal();
         closeMaterialPopup();
         closePumpList();
         closeMetricInfo();
@@ -1279,7 +1889,9 @@ document.addEventListener("keydown", event => {
     const target = event.target;
     if (
         (target?.classList?.contains("material-summary-card") ||
-            target?.classList?.contains("info-summary-card")) &&
+            target?.classList?.contains("info-summary-card") ||
+            target?.classList?.contains("selectable-inventory-card") ||
+            target?.classList?.contains("material-option-card")) &&
         (event.key === "Enter" || event.key === " ")
     ) {
         event.preventDefault();
