@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Recomendaci&oacute;n - Riego</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/frontend/style.css">
 </head>
 <body>
@@ -48,6 +49,15 @@
             <path d="M8 9h2"></path>
             <path d="M12 9h4"></path>
         </symbol>
+        <symbol id="icon-settings" viewBox="0 0 24 24">
+            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>
+            <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.05.05a2.1 2.1 0 0 1-2.97 2.97l-.05-.05a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.66V21a2.1 2.1 0 0 1-4.2 0v-.08a1.8 1.8 0 0 0-1.1-1.66 1.8 1.8 0 0 0-1.98.36l-.05.05a2.1 2.1 0 0 1-2.97-2.97l.05-.05A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.66-1.1H2.9a2.1 2.1 0 0 1 0-4.2h.08A1.8 1.8 0 0 0 4.64 8.6a1.8 1.8 0 0 0-.36-1.98l-.05-.05A2.1 2.1 0 0 1 7.2 3.6l.05.05a1.8 1.8 0 0 0 1.98.36 1.8 1.8 0 0 0 1.1-1.66V2.3a2.1 2.1 0 0 1 4.2 0v.08a1.8 1.8 0 0 0 1.1 1.66 1.8 1.8 0 0 0 1.98-.36l.05-.05a2.1 2.1 0 0 1 2.97 2.97l-.05.05a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.66 1.1h.08a2.1 2.1 0 0 1 0 4.2h-.08A1.8 1.8 0 0 0 19.4 15Z"></path>
+        </symbol>
+        <symbol id="icon-info" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 10v6"></path>
+            <path d="M12 7h.01"></path>
+        </symbol>
     </svg>
 
     <header class="topbar">
@@ -55,7 +65,7 @@
             <span class="status-dot"></span>
             <span class="brand-mark">RIEGO</span>
             <span class="brand-title">AN&Aacute;LISIS SYS</span>
-            <span class="brand-version">v1.0</span>
+            <span class="brand-version">v2.0</span>
         </div>
         <div class="topbar-meta">
             <span>Zona estudio <strong id="currentZone">Sin cargar</strong></span>
@@ -78,28 +88,24 @@
                 <span class="menu-glyph"><svg><use href="#icon-terrain"></use></svg></span>
                 <span>
                     <strong>An&aacute;lisis Terreno</strong>
-                    <small id="terrainStatus">Sin datos</small>
                 </span>
                     </a>
                     <a href="#" class="menu-link" onclick="switchTab('hidraulica'); return false;">
                 <span class="menu-glyph"><svg><use href="#icon-water"></use></svg></span>
                 <span>
                     <strong>An&aacute;lisis Hidr&aacute;ulico</strong>
-                    <small id="hydraulicStatus">Standby</small>
                 </span>
                     </a>
                     <a href="#" class="menu-link" onclick="switchTab('materiales'); return false;">
                 <span class="menu-glyph"><svg><use href="#icon-materials"></use></svg></span>
                 <span>
                     <strong>Materiales</strong>
-                    <small id="materialsStatus">Pendiente</small>
                 </span>
                     </a>
                     <a href="#" class="menu-link" onclick="switchTab('diseno'); return false;">
                 <span class="menu-glyph"><svg><use href="#icon-recommendation"></use></svg></span>
                 <span>
                     <strong>Recomendaci&oacute;n</strong>
-                    <small id="designStatus">Pendiente</small>
                 </span>
                     </a>
                     <a href="#" class="menu-link" onclick="switchTab('resultados'); return false;">
@@ -113,7 +119,6 @@
                 <span class="menu-glyph"><svg><use href="#icon-system"></use></svg></span>
                 <span>
                     <strong>Sistema</strong>
-                    <small id="systemStatus">Conectando</small>
                 </span>
                     </a>
         </nav>
@@ -239,6 +244,11 @@
                     <h1>An&aacute;lisis Hidr&aacute;ulico</h1>
                     <p>Estimaci&oacute;n de presiones, caudal y p&eacute;rdidas asociadas al terreno.</p>
                 </div>
+                <div class="section-actions">
+                    <button class="icon-action-btn" onclick="toggleHydraulicContext(event)" title="Configurar zona, clima y suelo" aria-label="Configurar zona, clima y suelo">
+                        <svg><use href="#icon-settings"></use></svg>
+                    </button>
+                </div>
             </div>
             <div class="metric-grid">
                 <article class="metric-card info-summary-card" role="button" tabindex="0" onclick="openMetricInfo('pressure')"><span class="metric-label">Presi&oacute;n requerida</span><strong id="hydPressure">--</strong><small>kPa en fuente</small></article>
@@ -317,14 +327,19 @@
                 <div>
                     <p class="eyebrow">REC</p>
                     <h1>Recomendaci&oacute;n T&eacute;cnica</h1>
-                    <p>Resumen de criterios para dise&ntilde;o y compra de componentes.</p>
+                    <p>Dictamen preliminar de factibilidad y acciones antes de aprobar el dise&ntilde;o.</p>
+                </div>
+                <div class="section-actions">
+                    <button class="icon-action-btn" onclick="toggleDesignInfo(event)" title="Ver informaci&oacute;n de factibilidad" aria-label="Ver informaci&oacute;n de factibilidad">
+                        <svg><use href="#icon-info"></use></svg>
+                    </button>
                 </div>
             </div>
             <div class="metric-grid">
-                <article class="metric-card"><span class="metric-label">&Aacute;rea estimada</span><strong id="designArea">--</strong><small>ha</small></article>
+                <article class="metric-card"><span class="metric-label">Factibilidad</span><strong id="designFeasibility">--</strong><small id="designFeasibilityHint">dictamen preliminar</small></article>
                 <article class="metric-card"><span class="metric-label">Longitud riego</span><strong id="designLength">--</strong><small>m</small></article>
                 <article class="metric-card"><span class="metric-label">Complejidad</span><strong id="designComplexity">--</strong><small>nivel</small></article>
-                <article class="metric-card"><span class="metric-label">Costo estimado</span><strong id="designCost">--</strong><small>nivel</small></article>
+                <article class="metric-card"><span class="metric-label">&Aacute;rea estimada</span><strong id="designArea">--</strong><small>ha</small></article>
                             </div>
             <article class="panel">
                 <div class="panel-header"><h2>Acciones recomendadas</h2><span class="accent green"></span></div>
@@ -378,6 +393,74 @@
         <span>Convergencia: <strong id="footerProgress">--</strong></span>
         <span>USACH | T&eacute;sis 2026</span>
     </footer>
+
+    <aside id="hydraulicContextDrawer" class="context-drawer" aria-hidden="true">
+        <div class="context-drawer-header">
+            <div>
+                <span>Contexto territorial</span>
+                <strong>Chile</strong>
+            </div>
+            <button class="modal-close" onclick="closeHydraulicContext()" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="context-drawer-body">
+            <label class="context-field">
+                <span>Zona de Chile</span>
+                <select id="zoneChile" onchange="syncHydraulicContextFromInputs(true)">
+                    <option value="norte_grande">Norte Grande</option>
+                    <option value="norte_chico">Norte Chico</option>
+                    <option value="zona_central">Zona Central</option>
+                    <option value="zona_sur">Zona Sur</option>
+                    <option value="zona_austral">Zona Austral</option>
+                </select>
+            </label>
+            <label class="context-field">
+                <span>Clima</span>
+                <select id="climateProfile" onchange="syncHydraulicContextFromInputs()">
+                    <option value="arido">Arido / desertico</option>
+                    <option value="semiarido">Semiarido</option>
+                    <option value="mediterraneo">Mediterraneo</option>
+                    <option value="templado_lluvioso">Templado lluvioso</option>
+                    <option value="frio_lluvioso">Frio lluvioso</option>
+                </select>
+            </label>
+            <label class="context-field">
+                <span>Tipo de suelo</span>
+                <select id="soilType" onchange="syncHydraulicContextFromInputs()">
+                    <option value="arenoso">Arenoso</option>
+                    <option value="franco_arenoso">Franco arenoso</option>
+                    <option value="franco">Franco</option>
+                    <option value="franco_arcilloso">Franco arcilloso</option>
+                    <option value="arcilloso">Arcilloso</option>
+                    <option value="organico_turboso">Organico / turboso</option>
+                </select>
+            </label>
+            <div class="context-readout" id="hydraulicContextSummary">
+                Ajusta zona, clima y suelo para recalcular demanda hidrica y margen de diseno.
+            </div>
+            <button class="btn btn-primary context-apply-btn" onclick="applyHydraulicContext()">Aplicar contexto</button>
+        </div>
+    </aside>
+
+    <aside id="designInfoDrawer" class="context-drawer info-drawer" aria-hidden="true">
+        <div class="context-drawer-header">
+            <div>
+                <span>Informaci&oacute;n</span>
+                <strong>Factibilidad t&eacute;cnica</strong>
+            </div>
+            <button class="modal-close" onclick="closeDesignInfo()" aria-label="Cerrar">&times;</button>
+        </div>
+        <div class="context-drawer-body">
+            <div class="feasibility-summary" id="designInfoSummary">
+                <span>Sin an&aacute;lisis</span>
+                <strong>Carga una imagen para emitir dictamen.</strong>
+            </div>
+            <div class="feasibility-reasons" id="designInfoReasons"></div>
+            <div class="context-readout" id="designInfoAction">
+                <span>Acci&oacute;n</span>
+                <strong>Esperando resultados.</strong>
+            </div>
+        </div>
+    </aside>
 
     <div id="uploadModal" class="modal" aria-hidden="true">
         <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
@@ -521,6 +604,7 @@
         // Sincronizar menú y tabs al cargar
         window.addEventListener('load', function() {
             switchTab('inicio');
+            syncHydraulicContextInputs();
             checkHealth();
             loadCatalogs();
         });

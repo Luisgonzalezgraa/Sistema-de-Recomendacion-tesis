@@ -15,13 +15,67 @@ const DEFAULT_HYDRAULIC_ASSUMPTIONS = {
     pipe_diameter_large_m: 0.04,
     pipe_diameter_small_m: 0.032,
     minimum_pipe_length_m: 80,
-    pipe_length_factor: 1.25
+    pipe_length_factor: 1.25,
+    zone_chile: "zona_central",
+    climate_profile: "mediterraneo",
+    soil_type: "franco"
+};
+
+const CHILE_HYDRAULIC_CONTEXT = {
+    norte_grande: {
+        label: "Norte Grande",
+        climate_profile: "arido",
+        water: "Alta evaporacion y mayor riesgo de sales; demanda base +35%.",
+        factor: 1.35
+    },
+    norte_chico: {
+        label: "Norte Chico",
+        climate_profile: "semiarido",
+        water: "Disponibilidad irregular y evaporacion alta; demanda base +22%.",
+        factor: 1.22
+    },
+    zona_central: {
+        label: "Zona Central",
+        climate_profile: "mediterraneo",
+        water: "Temporada seca marcada; demanda base de referencia.",
+        factor: 1
+    },
+    zona_sur: {
+        label: "Zona Sur",
+        climate_profile: "templado_lluvioso",
+        water: "Mayor aporte pluviometrico; demanda base -18%.",
+        factor: 0.82
+    },
+    zona_austral: {
+        label: "Zona Austral",
+        climate_profile: "frio_lluvioso",
+        water: "Clima frio y humedo; demanda base -28%.",
+        factor: 0.72
+    }
+};
+
+const CLIMATE_CONTEXT = {
+    arido: { label: "Arido / desertico", factor: 1.28 },
+    semiarido: { label: "Semiarido", factor: 1.14 },
+    mediterraneo: { label: "Mediterraneo", factor: 1 },
+    templado_lluvioso: { label: "Templado lluvioso", factor: 0.9 },
+    frio_lluvioso: { label: "Frio lluvioso", factor: 0.82 }
+};
+
+const SOIL_CONTEXT = {
+    arenoso: { label: "Arenoso", factor: 1.18, note: "Alta infiltracion; conviene riego mas frecuente." },
+    franco_arenoso: { label: "Franco arenoso", factor: 1.08, note: "Infiltracion media-alta." },
+    franco: { label: "Franco", factor: 1, note: "Retencion e infiltracion equilibradas." },
+    franco_arcilloso: { label: "Franco arcilloso", factor: 0.94, note: "Mayor retencion; cuidar encharcamiento." },
+    arcilloso: { label: "Arcilloso", factor: 0.88, note: "Infiltracion baja; aplicar caudales controlados." },
+    organico_turboso: { label: "Organico / turboso", factor: 0.86, note: "Alta retencion; validar drenaje." }
 };
 
 let hydraulicAssumptions = { ...DEFAULT_HYDRAULIC_ASSUMPTIONS };
 let activeMetricInfo = null;
 let currentPumpEvaluation = null;
 let currentMaterials = null;
+let currentDesignFeasibility = null;
 let catalogMode = null;
 let activeMaterialPopupType = null;
 let pumpCatalogData = [];
@@ -325,6 +379,150 @@ function setLoadingState(isLoading) {
         submitBtn.textContent = isLoading ? "Procesando..." : "Iniciar analisis";
     }
     setText("flowState", isLoading ? "Procesando" : "Listo");
+}
+
+function hydraulicContextLabels() {
+    const zone = CHILE_HYDRAULIC_CONTEXT[hydraulicAssumptions.zone_chile] || CHILE_HYDRAULIC_CONTEXT.zona_central;
+    const climate = CLIMATE_CONTEXT[hydraulicAssumptions.climate_profile] || CLIMATE_CONTEXT.mediterraneo;
+    const soil = SOIL_CONTEXT[hydraulicAssumptions.soil_type] || SOIL_CONTEXT.franco;
+    return { zone, climate, soil };
+}
+
+function syncHydraulicContextInputs() {
+    const zoneInput = $("zoneChile");
+    const climateInput = $("climateProfile");
+    const soilInput = $("soilType");
+    if (zoneInput) zoneInput.value = hydraulicAssumptions.zone_chile || "zona_central";
+    if (climateInput) climateInput.value = hydraulicAssumptions.climate_profile || "mediterraneo";
+    if (soilInput) soilInput.value = hydraulicAssumptions.soil_type || "franco";
+    renderHydraulicContextSummary();
+}
+
+function syncHydraulicContextFromInputs(syncClimateFromZone = false) {
+    const zoneInput = $("zoneChile");
+    const climateInput = $("climateProfile");
+    const soilInput = $("soilType");
+    if (zoneInput) {
+        hydraulicAssumptions.zone_chile = zoneInput.value;
+    }
+    if (syncClimateFromZone && climateInput) {
+        const zone = CHILE_HYDRAULIC_CONTEXT[hydraulicAssumptions.zone_chile];
+        climateInput.value = zone?.climate_profile || climateInput.value;
+    }
+    if (climateInput) {
+        hydraulicAssumptions.climate_profile = climateInput.value;
+    }
+    if (soilInput) {
+        hydraulicAssumptions.soil_type = soilInput.value;
+    }
+    renderHydraulicContextSummary();
+}
+
+function renderHydraulicContextSummary(serverContext = null) {
+    const summary = $("hydraulicContextSummary");
+    if (!summary) {
+        return;
+    }
+    const { zone, climate, soil } = hydraulicContextLabels();
+    const demandFactor = serverContext?.combined_demand_factor || (zone.factor * climate.factor * soil.factor);
+    summary.innerHTML = `
+        <span>Factor hidrico</span>
+        <strong>${formatNumber(demandFactor, 2)}x sobre demanda base</strong>
+        <small>${zone.label} | ${climate.label} | ${soil.label}</small>
+        <small>${zone.water} ${soil.note}</small>
+    `;
+}
+
+function toggleHydraulicContext(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const drawer = $("hydraulicContextDrawer");
+    if (!drawer) {
+        return;
+    }
+    syncHydraulicContextInputs();
+    drawer.classList.toggle("active");
+    drawer.setAttribute("aria-hidden", drawer.classList.contains("active") ? "false" : "true");
+}
+
+function closeHydraulicContext() {
+    const drawer = $("hydraulicContextDrawer");
+    if (drawer) {
+        drawer.classList.remove("active");
+        drawer.setAttribute("aria-hidden", "true");
+    }
+}
+
+function toggleDesignInfo(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const drawer = $("designInfoDrawer");
+    if (!drawer) {
+        return;
+    }
+    renderDesignInfo(currentDesignFeasibility);
+    drawer.classList.toggle("active");
+    drawer.setAttribute("aria-hidden", drawer.classList.contains("active") ? "false" : "true");
+}
+
+function closeDesignInfo() {
+    const drawer = $("designInfoDrawer");
+    if (drawer) {
+        drawer.classList.remove("active");
+        drawer.setAttribute("aria-hidden", "true");
+    }
+}
+
+function renderDesignInfo(feasibility) {
+    const summary = $("designInfoSummary");
+    const reasons = $("designInfoReasons");
+    const action = $("designInfoAction");
+    if (!summary || !reasons || !action) {
+        return;
+    }
+
+    if (!feasibility) {
+        summary.className = "feasibility-summary";
+        summary.innerHTML = `
+            <span>Sin analisis</span>
+            <strong>Carga una imagen para emitir dictamen.</strong>
+            <small>El sistema evaluara pendiente, desnivel, presion, caudal y motobomba disponible.</small>
+        `;
+        reasons.innerHTML = "";
+        action.innerHTML = `
+            <span>Accion</span>
+            <strong>Esperando resultados.</strong>
+        `;
+        return;
+    }
+
+    summary.className = `feasibility-summary ${feasibility.status || ""}`;
+    summary.innerHTML = `
+        <span>${feasibility.priority || "Info"}</span>
+        <strong>${feasibility.label || "Dictamen no disponible"}</strong>
+        <small>${feasibility.summary || ""}</small>
+    `;
+    reasons.innerHTML = (feasibility.reasons || []).length
+        ? (feasibility.reasons || []).map(reason => `<div>${reason}</div>`).join("")
+        : '<p class="empty-state">Sin observaciones criticas registradas.</p>';
+    action.innerHTML = `
+        <span>Accion recomendada</span>
+        <strong>${feasibility.decision || "--"}</strong>
+        <small>${feasibility.specialist_note || ""}</small>
+    `;
+}
+
+function applyHydraulicContext() {
+    syncHydraulicContextFromInputs();
+    closeHydraulicContext();
+    if (window.selectedAnalysisFile) {
+        submitAnalysis("hidraulica");
+    } else {
+        setText("hydraulicStatus", "Contexto listo");
+        setText("footerProgress", "contexto hidraulico actualizado");
+    }
 }
 
 async function openApiDocs() {
@@ -836,6 +1034,88 @@ function resetHydraulicAssumptions() {
     }
 }
 
+function buildFeasibilityFallback(terrain, hydraulic, design) {
+    const risk = hydraulic.hydraulic_risk || "--";
+    const slope = Number(terrain.slope_percentage ?? terrain.slope_degrees ?? 0);
+    const elevationDiff = Number(terrain.elevation_difference || 0);
+    const area = Number(design.estimated_area || 0);
+    const pressureLoss = Number(hydraulic.pressure_loss || 0);
+    const requiredHead = Number(hydraulic.required_total_head || 0);
+    const finalPressure = Number(hydraulic.final_pressure || 0);
+    const catalog = hydraulic.pump_catalog || [];
+    const hasCompatiblePump = catalog.some(pump => pump.meets_requirements);
+
+    const blockingReasons = [];
+    const cautionReasons = [];
+
+    if (risk === "Alto") {
+        blockingReasons.push("Riesgo hidraulico alto por perdida de carga, desnivel o presion final.");
+    }
+    if (catalog.length && !hasCompatiblePump) {
+        blockingReasons.push("No hay motobomba compatible en el catalogo actual para caudal y altura requeridos.");
+    }
+    if (requiredHead > 120) {
+        blockingReasons.push(`Altura dinamica requerida muy elevada (${formatUnit(requiredHead, " m", 2)}).`);
+    }
+    if (elevationDiff > 80) {
+        blockingReasons.push(`Desnivel del terreno muy alto (${formatUnit(elevationDiff, " m", 2)}); requiere sectorizacion y validacion especializada.`);
+    }
+    if (finalPressure && finalPressure < 70) {
+        blockingReasons.push(`Presion final estimada insuficiente (${formatUnit(finalPressure, " kPa", 2)}).`);
+    }
+
+    if (risk === "Medio") {
+        cautionReasons.push("Riesgo hidraulico medio; conviene sectorizar y revisar reguladores de presion.");
+    }
+    if (slope > 8) {
+        cautionReasons.push(`Pendiente media relevante (${formatUnit(slope, "%", 2)}).`);
+    }
+    if (area > 5) {
+        cautionReasons.push(`Area superior a 5 ha (${formatUnit(area, " ha", 2)}); validar turnos de riego.`);
+    }
+    if (pressureLoss > 45) {
+        cautionReasons.push(`Perdida total relevante (${formatUnit(pressureLoss, " kPa", 2)}).`);
+    }
+
+    if (blockingReasons.length) {
+        return {
+            status: "no_factible",
+            label: "No factible preliminarmente",
+            priority: "Alto",
+            summary: "El sistema no deberia aprobar el diseno con los parametros actuales.",
+            decision: "No continuar a compra ni instalacion sin redisenar sectores, revisar fuente de agua y seleccionar una motobomba adecuada.",
+            reasons: blockingReasons.concat(cautionReasons),
+            specialist_note: "Este resultado es una preevaluacion automatica; requiere revision profesional antes de cualquier decision de compra."
+        };
+    }
+
+    if (cautionReasons.length) {
+        return {
+            status: "condicionado",
+            label: "Factible condicionado",
+            priority: "Medio",
+            summary: "El diseno puede evaluarse, pero requiere ajustes antes de aprobarse.",
+            decision: "Revisar sectorizacion, presiones y materiales con un especialista antes de cerrar el diseno.",
+            reasons: cautionReasons,
+            specialist_note: "El visto bueno final debe considerar cultivo, marco de plantacion, disponibilidad real de agua y plano constructivo."
+        };
+    }
+
+    return {
+        status: "factible",
+        label: "Factible preliminarmente",
+        priority: "Bajo",
+        summary: "El analisis preliminar no detecta restricciones hidraulicas criticas.",
+        decision: "Se recomienda consultar con un especialista para dar el visto bueno final antes de comprar o instalar.",
+        reasons: [
+            "Riesgo hidraulico bajo.",
+            "La presion final estimada se mantiene dentro de un rango operacional preliminar.",
+            hasCompatiblePump ? "El catalogo contiene al menos una motobomba compatible." : "No se detectaron bloqueos criticos con los parametros actuales."
+        ],
+        specialist_note: "Este resultado es una preevaluacion automatica; el visto bueno final debe considerar cultivo, calidad de filtrado y trazado real."
+    };
+}
+
 function displayAnalysisResults(analysisData) {
     if (!analysisData) {
         return;
@@ -845,9 +1125,11 @@ function displayAnalysisResults(analysisData) {
     const hydraulic = analysisData.hydraulic_analysis || {};
     const materials = analysisData.materials_analysis || {};
     const design = analysisData.design_recommendations || {};
+    currentDesignFeasibility = design.feasibility || buildFeasibilityFallback(terrain, hydraulic, design);
     if (hydraulic.assumptions) {
         hydraulicAssumptions = { ...hydraulicAssumptions, ...hydraulic.assumptions };
     }
+    renderHydraulicContextSummary(hydraulic.context);
 
     const fileName = analysisData.file_name || "--";
     const shortName = fileName.length > 28 ? `${fileName.slice(0, 25)}...` : fileName;
@@ -885,11 +1167,23 @@ function displayAnalysisResults(analysisData) {
     setText("designLength", formatNumber(design.estimated_drip_length, 0));
     setText("designComplexity", design.complexity_level || "--");
     setText("designCost", design.estimated_cost_level || "--");
+    setText("designFeasibility", currentDesignFeasibility?.label || "--");
+    setText("designFeasibilityHint", currentDesignFeasibility?.summary || "dictamen preliminar");
+    renderDesignInfo(currentDesignFeasibility);
 
     renderHydraulicCharts(hydraulic);
     renderPumpCatalog(hydraulic);
     renderMaterials(materials);
-    renderRecommendations(design.recommendations || []);
+    const recommendations = design.recommendations || [];
+    const hasFeasibilityRecommendation = recommendations.some(rec => normalizePriority(rec.type) === "factibilidad");
+    renderRecommendations(hasFeasibilityRecommendation
+        ? recommendations
+        : [{
+            priority: currentDesignFeasibility.priority,
+            type: "Factibilidad",
+            message: `${currentDesignFeasibility.label}. ${currentDesignFeasibility.summary}`,
+            action: currentDesignFeasibility.decision
+        }].concat(recommendations));
     renderReport(analysisData);
     applySelectedRecommendations();
 }
@@ -1005,14 +1299,19 @@ function renderHydraulicCharts(hydraulic) {
         </div>
     `).join("");
 
+    const context = hydraulic.context || {};
     sectorChart.innerHTML = `
         <div class="gauge-card"><span>Sector</span><strong>${formatUnit(hydraulic.design_sector_area, " ha", 2)}</strong><small>area analizada</small></div>
+        <div class="gauge-card"><span>Zona</span><strong>${context.zone_label || hydraulicContextLabels().zone.label}</strong><small>Chile</small></div>
+        <div class="gauge-card"><span>Clima</span><strong>${context.climate_label || hydraulicContextLabels().climate.label}</strong><small>factor ${formatUnit(context.climate_factor, "", 2)}</small></div>
+        <div class="gauge-card"><span>Suelo</span><strong>${context.soil_label || hydraulicContextLabels().soil.label}</strong><small>factor ${formatUnit(context.soil_factor, "", 2)}</small></div>
         <div class="gauge-card"><span>Gotero</span><strong>${formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0)}</strong><small>presion base</small></div>
         <div class="gauge-card"><span>Margen</span><strong>${formatFactorAsPercent(hydraulic.pressure_safety_factor, 0)}</strong><small>seguridad</small></div>
         <div class="gauge-card"><span>Diametro</span><strong>${formatUnit(hydraulic.pipe_diameter, " mm", 0)}</strong><small>tuberia base</small></div>
         <div class="gauge-card"><span>Longitud</span><strong>${formatUnit(hydraulic.pipe_length, " m", 0)}</strong><small>tramo critico</small></div>
         <div class="gauge-card"><span>Presion final</span><strong>${formatUnit(hydraulic.final_pressure, " kPa", 2)}</strong><small>salida estimada</small></div>
         <div class="gauge-card"><span>Caudal requerido</span><strong>${formatUnit(hydraulic.available_flow, " L/min", 2)}</strong><small>${formatUnit(hydraulic.flow_per_hectare, " L/min/ha", 2)}</small></div>
+        <div class="gauge-card"><span>Factor demanda</span><strong>${formatUnit(context.combined_demand_factor, "x", 2)}</strong><small>zona + clima + suelo</small></div>
         <div class="gauge-card"><span>Riesgo</span><strong>${hydraulic.hydraulic_risk || "--"}</strong><small>criterio hidraulico</small></div>
         <div class="gauge-card"><span>Altura total</span><strong>${formatUnit(hydraulic.required_total_head, " m", 2)}</strong><small>carga dinamica</small></div>
         <div class="gauge-card"><span>Potencia</span><strong>${formatUnit(hydraulic.required_pump_power, " HP", 2)}</strong><small>eficiencia ${formatUnit(hydraulic.assumptions?.pump_efficiency, "", 2)}</small></div>
@@ -1046,18 +1345,18 @@ function renderPumpCatalog(hydraulic) {
     }
 
     container.innerHTML = `
-        <button class="pump-requirement-card ${recommended.meets_requirements ? "suitable" : "limited"}" onclick="openPumpList()">
-            <div>
-                <span>Requerimiento calculado</span>
-                <strong>Bomba de ${formatUnit(spec.minimum_power_hp, " HP", 2)} para ${formatUnit(spec.required_flow_l_min, " L/min", 2)}</strong>
-                <small>${formatUnit(spec.required_head_m, " m", 2)} de altura total | ${formatUnit(spec.required_pressure_kpa, " kPa", 2)}</small>
-            </div>
-            <div>
-                <span>${recommended.meets_requirements ? "Modelo compatible sugerido" : "Mejor aproximacion catalogada"}</span>
+        <button class="pump-recommendation ${recommended.meets_requirements ? "suitable" : "limited"}" onclick="openPumpList()">
+            <div class="pump-recommendation-main">
+                <span>${recommended.meets_requirements ? "Motobomba sugerida" : "Mejor alternativa disponible"}</span>
                 <strong>${recommended.model}</strong>
                 <small>${recommended.type} | ${formatUnit(recommended.engine_power_hp, " HP", 1)}</small>
             </div>
-            <small>${matching.length ? `${matching.length} modelo(s) cumplen. Toca para ver la lista.` : "Ningun modelo del catalogo cumple completamente. Toca para revisar detalles."}</small>
+            <div class="pump-recommendation-specs">
+                <div><span>Potencia req.</span><strong>${formatUnit(spec.minimum_power_hp, " HP", 2)}</strong></div>
+                <div><span>Caudal req.</span><strong>${formatUnit(spec.required_flow_l_min, " L/min", 2)}</strong></div>
+                <div><span>Altura req.</span><strong>${formatUnit(spec.required_head_m, " m", 2)}</strong></div>
+            </div>
+            <span class="pump-recommendation-note">${matching.length ? `${matching.length} modelo(s) compatible(s)` : "Sin coincidencia exacta"}</span>
         </button>
     `;
 }
@@ -1116,24 +1415,37 @@ function openPumpList() {
     if (summary) {
         const searchUrl = buildPumpSearchUrl(spec);
         summary.innerHTML = `
-            Requerido para el terreno: ${formatUnit(spec.minimum_power_hp, " HP", 2)}, ${formatUnit(spec.required_flow_l_min, " L/min", 2)} y ${formatUnit(spec.required_head_m, " m", 2)} de altura total. ${spec.terrain_context || ""}
-            <a class="pump-search-link" href="${searchUrl}" target="_blank" rel="noopener noreferrer">Buscar mas motobombas compatibles en internet</a>
+            <div class="pump-summary-header">
+                <strong>Requerimiento del terreno</strong>
+                <a class="pump-search-link" href="${searchUrl}" target="_blank" rel="noopener noreferrer">Buscar mas</a>
+            </div>
+            <div class="pump-summary-metrics">
+                <div><span>Potencia</span><strong>${formatUnit(spec.minimum_power_hp, " HP", 2)}</strong></div>
+                <div><span>Caudal</span><strong>${formatUnit(spec.required_flow_l_min, " L/min", 2)}</strong></div>
+                <div><span>Altura</span><strong>${formatUnit(spec.required_head_m, " m", 2)}</strong></div>
+            </div>
+            <small>${spec.terrain_context || ""}</small>
         `;
     }
 
     const pumpsToShow = matching.length ? matching : catalog;
     list.innerHTML = pumpsToShow.map(pump => `
-        <article class="pump-list-card ${pump.meets_requirements ? "suitable" : "limited"}">
-            <div>
-                <span>${pump.type || "Motobomba"}</span>
-                <strong>${pump.model}</strong>
-                <small>${pump.engine || "--"} | ${formatUnit(pump.engine_power_hp, " HP", 1)}</small>
+        <article class="pump-option ${pump.meets_requirements ? "suitable" : "limited"}">
+            <div class="pump-option-header">
+                <div>
+                    <span>${pump.type || "Motobomba"}</span>
+                    <strong>${pump.model}</strong>
+                    <small>${pump.engine || "--"} | ${formatUnit(pump.engine_power_hp, " HP", 1)}</small>
+                </div>
+                <em>${pump.meets_requirements ? "Compatible" : "Insuficiente"}</em>
             </div>
-            <div><span>Caudal max.</span><strong>${formatUnit(pump.max_flow_l_min, " L/min", 0)}</strong><small>margen ${formatUnit(pump.flow_margin_l_min, " L/min", 2)}</small></div>
-            <div><span>Altura max.</span><strong>${formatUnit(pump.max_head_m, " m", 1)}</strong><small>margen ${formatUnit(pump.head_margin_m, " m", 2)}</small></div>
-            <div><span>Fuente</span><strong>${pump.source || "Catalogo"}</strong><small><a href="${pump.source_url}" target="_blank" rel="noopener noreferrer">ver ficha</a></small></div>
+            <div class="pump-option-specs">
+                <div><span>Caudal max.</span><strong>${formatUnit(pump.max_flow_l_min, " L/min", 0)}</strong><small>margen ${formatUnit(pump.flow_margin_l_min, " L/min", 2)}</small></div>
+                <div><span>Altura max.</span><strong>${formatUnit(pump.max_head_m, " m", 1)}</strong><small>margen ${formatUnit(pump.head_margin_m, " m", 2)}</small></div>
+                <div><span>Fuente</span><strong>${pump.source || "Catalogo"}</strong>${pump.source_url ? `<small><a href="${pump.source_url}" target="_blank" rel="noopener noreferrer">ver ficha</a></small>` : ""}</div>
+            </div>
             <p>${pump.selection_note || ""}</p>
-            <div class="inventory-actions-row">
+            <div class="pump-option-actions">
                 <button class="mini-action-btn" ${selectionDisabledAttr()} onclick="selectInventoryItem('pump', ${pump.id})">Seleccionar</button>
                 <button class="mini-action-btn danger" onclick="confirmDeleteInventoryItem('pump', ${pump.id})">Eliminar</button>
             </div>
@@ -1486,8 +1798,10 @@ function renderReport(data) {
 
     const terrain = data.terrain_analysis || {};
     const hydraulic = data.hydraulic_analysis || {};
+    const context = hydraulic.context || {};
     const materials = data.materials_analysis || {};
     const design = data.design_recommendations || {};
+    const feasibility = design.feasibility || {};
     const dimensions = data.image_dimensions || {};
     const downloadBtn = $("reportDownloadBtn");
 
@@ -1498,6 +1812,7 @@ function renderReport(data) {
     content.innerHTML = `
         <div class="report-row"><span>Archivo</span><strong>${data.file_name || "--"}</strong></div>
         <div class="report-row"><span>Dimensiones</span><strong>${dimensions.width || "--"} x ${dimensions.height || "--"} px</strong></div>
+        <div class="report-row"><span>Contexto</span><strong>${context.zone_label || "--"} | ${context.climate_label || "--"} | suelo ${context.soil_label || "--"} | factor ${formatUnit(context.combined_demand_factor, "x", 2)}</strong></div>
         <div class="report-row"><span>Terreno</span><strong>Pendiente ${formatUnit(terrain.slope_degrees, "°", 2)}, desnivel ${formatUnit(terrain.elevation_difference, " m", 2)}</strong></div>
         <div class="report-row"><span>Hidraulica</span><strong>Riesgo ${hydraulic.hydraulic_risk || "--"}, perdida ${formatUnit(hydraulic.pressure_loss, " kPa", 2)}</strong></div>
         <div class="report-row"><span>Motobomba</span><strong>${hydraulic.recommended_pump?.model || "--"}, potencia requerida ${formatUnit(hydraulic.required_pump_power, " HP", 2)}, caudal requerido ${formatUnit(hydraulic.available_flow, " L/min", 2)}</strong></div>
@@ -1551,6 +1866,7 @@ function downloadReportPdf() {
 function buildReportPdfHtml(data) {
     const terrain = data.terrain_analysis || {};
     const hydraulic = data.hydraulic_analysis || {};
+    const context = hydraulic.context || {};
     const materials = data.materials_analysis || {};
     const design = data.design_recommendations || {};
     const dimensions = data.image_dimensions || {};
@@ -1813,6 +2129,9 @@ function buildReportPdfHtml(data) {
                 ${reportMetric("Friccion", formatUnit(hydraulic.friction_loss, " kPa", 2))}
                 ${reportMetric("Desnivel hidraulico", formatUnit(hydraulic.elevation_pressure_change, " kPa", 2))}
                 ${reportMetric("Riesgo", hydraulic.hydraulic_risk || "--")}
+                ${reportMetric("Zona Chile", context.zone_label || "--")}
+                ${reportMetric("Clima", context.climate_label || "--")}
+                ${reportMetric("Tipo de suelo", context.soil_label || "--")}
             </div>
         </section>
 
@@ -1849,6 +2168,7 @@ function buildReportPdfHtml(data) {
             <h2>Supuestos Configurables</h2>
             <div class="pdf-grid">
                 ${reportMetric("Demanda de riego", formatUnit(hydraulic.flow_per_hectare, " L/min/ha", 2))}
+                ${reportMetric("Factor territorial", formatUnit(context.combined_demand_factor, "x", 2))}
                 ${reportMetric("Presion gotero", formatUnit(hydraulic.emitter_operating_pressure, " kPa", 0))}
                 ${reportMetric("Margen seguridad", formatFactorAsPercent(hydraulic.pressure_safety_factor, 0))}
                 ${reportMetric("Rendimiento bomba", formatNumber(hydraulic.assumptions?.pump_efficiency, 2))}
@@ -1874,6 +2194,8 @@ function buildReportPdfHtml(data) {
 
 window.addEventListener("keydown", event => {
     if (event.key === "Escape") {
+        closeHydraulicContext();
+        closeDesignInfo();
         closeConfirmAction();
         closeFeedbackModal();
         closeInventoryModal();
@@ -1883,6 +2205,28 @@ window.addEventListener("keydown", event => {
         closeMetricInfo();
         closeUploadModal();
     }
+});
+
+document.addEventListener("click", event => {
+    const drawer = $("hydraulicContextDrawer");
+    if (!drawer || !drawer.classList.contains("active")) {
+        return;
+    }
+    if (drawer.contains(event.target) || event.target.closest("[onclick^='toggleHydraulicContext']")) {
+        return;
+    }
+    closeHydraulicContext();
+});
+
+document.addEventListener("click", event => {
+    const drawer = $("designInfoDrawer");
+    if (!drawer || !drawer.classList.contains("active")) {
+        return;
+    }
+    if (drawer.contains(event.target) || event.target.closest("[onclick^='toggleDesignInfo']")) {
+        return;
+    }
+    closeDesignInfo();
 });
 
 document.addEventListener("keydown", event => {
@@ -1898,5 +2242,8 @@ document.addEventListener("keydown", event => {
         target.click();
     }
 });
+
+/* Theme toggle: light/dark */
+
 
 console.log("Dashboard tecnico de riego cargado");

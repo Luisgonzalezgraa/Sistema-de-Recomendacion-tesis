@@ -49,6 +49,37 @@ def test_preliminary_hydraulic_analysis_uses_configurable_assumptions():
     assert result["source_pressure"] > result["pressure_before_safety"]
 
 
+def test_preliminary_hydraulic_analysis_applies_chile_context_factors():
+    endpoint = ImageAnalysisEndpoint()
+    base = endpoint._parse_hydraulic_assumptions({})
+    northern_sandy = endpoint._parse_hydraulic_assumptions(
+        {
+            "zone_chile": "norte_grande",
+            "climate_profile": "arido",
+            "soil_type": "arenoso",
+        }
+    )
+
+    base_result = endpoint._build_preliminary_hydraulic_analysis(
+        slope_percentage=5,
+        elevation_diff=4,
+        area_hectares=1,
+        assumptions=base,
+    )
+    context_result = endpoint._build_preliminary_hydraulic_analysis(
+        slope_percentage=5,
+        elevation_diff=4,
+        area_hectares=1,
+        assumptions=northern_sandy,
+    )
+
+    assert context_result["context"]["zone_label"] == "Norte Grande"
+    assert context_result["context"]["soil_label"] == "Arenoso"
+    assert context_result["context"]["combined_demand_factor"] > 1
+    assert context_result["available_flow"] > base_result["available_flow"]
+    assert context_result["pressure_safety_factor"] > base_result["pressure_safety_factor"]
+
+
 def test_pump_catalog_orders_compatible_pumps_first():
     endpoint = ImageAnalysisEndpoint()
 
@@ -63,3 +94,44 @@ def test_pump_catalog_orders_compatible_pumps_first():
     assert pumps[0]["max_flow_l_min"] >= 100
     assert pumps[0]["max_head_m"] >= 30
 
+
+def test_feasibility_blocks_design_without_compatible_pump():
+    endpoint = ImageAnalysisEndpoint()
+    hydraulic = endpoint._build_preliminary_hydraulic_analysis(
+        slope_percentage=25,
+        elevation_diff=120,
+        area_hectares=3,
+        assumptions=endpoint._parse_hydraulic_assumptions({}),
+    )
+
+    feasibility = endpoint._build_feasibility_assessment(
+        slope_percentage=25,
+        elevation_diff=120,
+        area_hectares=3,
+        hydraulic_analysis=hydraulic,
+    )
+
+    assert feasibility["status"] == "no_factible"
+    assert feasibility["priority"] == "Alto"
+    assert "No continuar" in feasibility["decision"]
+
+
+def test_feasibility_low_risk_requires_specialist_final_approval():
+    endpoint = ImageAnalysisEndpoint()
+    hydraulic = endpoint._build_preliminary_hydraulic_analysis(
+        slope_percentage=2,
+        elevation_diff=1,
+        area_hectares=0.2,
+        assumptions=endpoint._parse_hydraulic_assumptions({}),
+    )
+
+    feasibility = endpoint._build_feasibility_assessment(
+        slope_percentage=2,
+        elevation_diff=1,
+        area_hectares=0.2,
+        hydraulic_analysis=hydraulic,
+    )
+
+    assert feasibility["status"] == "factible"
+    assert feasibility["priority"] == "Bajo"
+    assert "especialista" in feasibility["decision"]

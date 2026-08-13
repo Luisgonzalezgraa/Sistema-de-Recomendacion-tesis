@@ -21,6 +21,61 @@ config = get_config()
 
 CATALOG_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
 
+CHILE_ZONE_FACTORS = {
+    'norte_grande': {
+        'label': 'Norte Grande',
+        'default_climate': 'arido',
+        'demand_factor': 1.35,
+        'water_quality_factor': 0.94,
+        'note': 'Alta evaporacion y mayor riesgo de sales.'
+    },
+    'norte_chico': {
+        'label': 'Norte Chico',
+        'default_climate': 'semiarido',
+        'demand_factor': 1.22,
+        'water_quality_factor': 0.97,
+        'note': 'Disponibilidad irregular y evaporacion alta.'
+    },
+    'zona_central': {
+        'label': 'Zona Central',
+        'default_climate': 'mediterraneo',
+        'demand_factor': 1.0,
+        'water_quality_factor': 1.0,
+        'note': 'Temporada seca marcada.'
+    },
+    'zona_sur': {
+        'label': 'Zona Sur',
+        'default_climate': 'templado_lluvioso',
+        'demand_factor': 0.82,
+        'water_quality_factor': 1.02,
+        'note': 'Mayor aporte pluviometrico.'
+    },
+    'zona_austral': {
+        'label': 'Zona Austral',
+        'default_climate': 'frio_lluvioso',
+        'demand_factor': 0.72,
+        'water_quality_factor': 1.02,
+        'note': 'Clima frio y humedo.'
+    }
+}
+
+CLIMATE_FACTORS = {
+    'arido': {'label': 'Arido / desertico', 'demand_factor': 1.28},
+    'semiarido': {'label': 'Semiarido', 'demand_factor': 1.14},
+    'mediterraneo': {'label': 'Mediterraneo', 'demand_factor': 1.0},
+    'templado_lluvioso': {'label': 'Templado lluvioso', 'demand_factor': 0.90},
+    'frio_lluvioso': {'label': 'Frio lluvioso', 'demand_factor': 0.82}
+}
+
+SOIL_FACTORS = {
+    'arenoso': {'label': 'Arenoso', 'demand_factor': 1.18, 'safety_delta': 0.06},
+    'franco_arenoso': {'label': 'Franco arenoso', 'demand_factor': 1.08, 'safety_delta': 0.03},
+    'franco': {'label': 'Franco', 'demand_factor': 1.0, 'safety_delta': 0.0},
+    'franco_arcilloso': {'label': 'Franco arcilloso', 'demand_factor': 0.94, 'safety_delta': 0.03},
+    'arcilloso': {'label': 'Arcilloso', 'demand_factor': 0.88, 'safety_delta': 0.08},
+    'organico_turboso': {'label': 'Organico / turboso', 'demand_factor': 0.86, 'safety_delta': 0.05}
+}
+
 
 def save_catalog_image(file_storage):
     if not file_storage or not file_storage.filename:
@@ -725,6 +780,22 @@ class ImageAnalysisEndpoint(Resource):
             lower, upper = ranges[key]
             assumptions[key] = min(max(value, lower), upper)
 
+        zone = form_data.get('zone_chile', 'zona_central')
+        if zone not in CHILE_ZONE_FACTORS:
+            zone = 'zona_central'
+
+        climate = form_data.get('climate_profile') or CHILE_ZONE_FACTORS[zone]['default_climate']
+        if climate not in CLIMATE_FACTORS:
+            climate = CHILE_ZONE_FACTORS[zone]['default_climate']
+
+        soil = form_data.get('soil_type', 'franco')
+        if soil not in SOIL_FACTORS:
+            soil = 'franco'
+
+        assumptions['zone_chile'] = zone
+        assumptions['climate_profile'] = climate
+        assumptions['soil_type'] = soil
+
         return assumptions
 
     def _analyze_image(self, file_path, filename, hydraulic_assumptions=None):
@@ -856,9 +927,17 @@ class ImageAnalysisEndpoint(Resource):
             self._hydraulic_recommendation(hydraulic_analysis),
             self._materials_recommendation(materials_analysis)
         ])
+        feasibility = self._build_feasibility_assessment(
+            slope_percentage=slope_percentage,
+            elevation_diff=elevation_diff,
+            area_hectares=source_area,
+            hydraulic_analysis=hydraulic_analysis
+        )
+        recommendations.insert(0, feasibility['recommendation'])
 
         design_analysis = {
             'recommendations': recommendations,
+            'feasibility': feasibility,
             'estimated_area': source_area,
             'estimated_drip_length': estimated_drip_length,
             'complexity_level': self._classify_design_complexity(
@@ -1014,9 +1093,28 @@ class ImageAnalysisEndpoint(Resource):
 
     def _build_preliminary_hydraulic_analysis(self, slope_percentage, elevation_diff, area_hectares, assumptions=None):
         assumptions = assumptions or self._parse_hydraulic_assumptions({})
+        zone_key = assumptions.get('zone_chile', 'zona_central')
+        climate_key = assumptions.get('climate_profile', CHILE_ZONE_FACTORS['zona_central']['default_climate'])
+        soil_key = assumptions.get('soil_type', 'franco')
+        zone_context = CHILE_ZONE_FACTORS.get(zone_key, CHILE_ZONE_FACTORS['zona_central'])
+        climate_context = CLIMATE_FACTORS.get(climate_key, CLIMATE_FACTORS[zone_context['default_climate']])
+        soil_context = SOIL_FACTORS.get(soil_key, SOIL_FACTORS['franco'])
+        combined_demand_factor = (
+            zone_context['demand_factor'] *
+            climate_context['demand_factor'] *
+            soil_context['demand_factor']
+        )
+        adjusted_safety_factor = min(
+            2.5,
+            assumptions['pressure_safety_factor'] + soil_context['safety_delta']
+        )
+        adjusted_hazen_c = min(
+            180.0,
+            max(60.0, assumptions['hazen_williams_c'] * zone_context['water_quality_factor'])
+        )
         area = area_hectares if area_hectares and area_hectares > 0 else 1.0
         design_sector_ha = min(area, assumptions['max_sector_area_ha'])
-        flow_per_hectare_l_min = assumptions['flow_per_hectare_l_min']
+        flow_per_hectare_l_min = assumptions['flow_per_hectare_l_min'] * combined_demand_factor
         available_flow_l_min = max(
             assumptions['minimum_flow_l_min'],
             design_sector_ha * flow_per_hectare_l_min
@@ -1036,13 +1134,13 @@ class ImageAnalysisEndpoint(Resource):
             length=pipe_length_m,
             flow_rate=flow_m3_s,
             diameter=pipe_diameter_m,
-            c_coefficient=assumptions['hazen_williams_c']
+            c_coefficient=adjusted_hazen_c
         )
         elevation_pressure_kpa = elevation_diff * 9.81
         friction_loss_kpa = friction_loss_bar * 100
         total_pressure_loss_kpa = friction_loss_kpa + elevation_pressure_kpa
         emitter_operating_pressure_kpa = assumptions['emitter_operating_pressure_kpa']
-        safety_factor = assumptions['pressure_safety_factor']
+        safety_factor = adjusted_safety_factor
         pressure_before_safety_kpa = emitter_operating_pressure_kpa + total_pressure_loss_kpa
         initial_pressure_kpa = pressure_before_safety_kpa * safety_factor
         final_pressure_kpa = initial_pressure_kpa - total_pressure_loss_kpa
@@ -1102,8 +1200,24 @@ class ImageAnalysisEndpoint(Resource):
                 )
             },
             'assumptions': {
-                key: round(value, 4)
+                key: round(value, 4) if isinstance(value, (int, float)) else value
                 for key, value in assumptions.items()
+            },
+            'context': {
+                'zone': zone_key,
+                'zone_label': zone_context['label'],
+                'climate_profile': climate_key,
+                'climate_label': climate_context['label'],
+                'soil_type': soil_key,
+                'soil_label': soil_context['label'],
+                'zone_demand_factor': round(zone_context['demand_factor'], 3),
+                'climate_factor': round(climate_context['demand_factor'], 3),
+                'soil_factor': round(soil_context['demand_factor'], 3),
+                'combined_demand_factor': round(combined_demand_factor, 3),
+                'water_quality_factor': round(zone_context['water_quality_factor'], 3),
+                'adjusted_hazen_williams_c': round(adjusted_hazen_c, 2),
+                'soil_safety_delta': round(soil_context['safety_delta'], 3),
+                'note': zone_context['note']
             },
             'calculation_basis': 'Presion minima requerida en fuente = presion operacion goteros + desnivel DEM/Google + friccion Hazen-Williams, con margen configurable; bomba evaluada con caudal maximo y altura total de catalogo.'
         }
@@ -1269,6 +1383,81 @@ class ImageAnalysisEndpoint(Resource):
                 f"{materials_analysis['lateral_diameter_mm']} mm."
             ),
             'action': 'Revisar listado de materiales y ajustar cantidades con el plano definitivo de riego.'
+        }
+
+    def _build_feasibility_assessment(self, slope_percentage, elevation_diff, area_hectares, hydraulic_analysis):
+        slope = slope_percentage or 0
+        area = area_hectares or 0
+        risk = hydraulic_analysis.get('hydraulic_risk') or 'Sin clasificar'
+        pressure_loss = hydraulic_analysis.get('pressure_loss') or 0
+        required_head = hydraulic_analysis.get('required_total_head') or 0
+        final_pressure = hydraulic_analysis.get('final_pressure') or 0
+        pump_catalog = hydraulic_analysis.get('pump_catalog') or []
+        has_compatible_pump = any(pump.get('meets_requirements') for pump in pump_catalog)
+
+        blocking_reasons = []
+        caution_reasons = []
+
+        if risk == 'Alto':
+            blocking_reasons.append('Riesgo hidraulico alto por perdida de carga, desnivel o presion final.')
+        if not has_compatible_pump:
+            blocking_reasons.append('No hay motobomba compatible en el catalogo actual para caudal y altura requeridos.')
+        if required_head > 120:
+            blocking_reasons.append(f'Altura dinamica requerida muy elevada ({required_head} m) para una solucion directa de riego por goteo.')
+        if elevation_diff > 80:
+            blocking_reasons.append(f'Desnivel del terreno muy alto ({round(elevation_diff, 2)} m); requiere sectorizacion y validacion especializada.')
+        if final_pressure < 70:
+            blocking_reasons.append(f'Presion final estimada insuficiente ({final_pressure} kPa).')
+
+        if risk == 'Medio':
+            caution_reasons.append('Riesgo hidraulico medio; conviene sectorizar y revisar reguladores de presion.')
+        if slope > 8:
+            caution_reasons.append(f'Pendiente media relevante ({round(slope, 2)}%).')
+        if area > 5:
+            caution_reasons.append(f'Area superior a 5 ha ({round(area, 2)} ha); validar turnos de riego.')
+        if pressure_loss > 45:
+            caution_reasons.append(f'Perdida total relevante ({pressure_loss} kPa).')
+
+        if blocking_reasons:
+            status = 'no_factible'
+            label = 'No factible preliminarmente'
+            priority = 'Alto'
+            summary = 'El sistema no deberia aprobar el diseno con los parametros actuales.'
+            decision = 'No continuar a compra ni instalacion sin redisenar sectores, revisar fuente de agua y seleccionar una motobomba adecuada.'
+            reasons = blocking_reasons + caution_reasons
+        elif caution_reasons:
+            status = 'condicionado'
+            label = 'Factible condicionado'
+            priority = 'Medio'
+            summary = 'El diseno puede evaluarse, pero requiere ajustes antes de aprobarse.'
+            decision = 'Revisar sectorizacion, presiones y materiales con un especialista antes de cerrar el diseno.'
+            reasons = caution_reasons
+        else:
+            status = 'factible'
+            label = 'Factible preliminarmente'
+            priority = 'Bajo'
+            summary = 'El analisis preliminar no detecta restricciones hidraulicas criticas.'
+            decision = 'Se recomienda consultar con un especialista para dar el visto bueno final antes de comprar o instalar.'
+            reasons = [
+                'Riesgo hidraulico bajo.',
+                'La presion final estimada se mantiene dentro de un rango operacional preliminar.',
+                'El catalogo contiene al menos una motobomba compatible.'
+            ]
+
+        return {
+            'status': status,
+            'label': label,
+            'priority': priority,
+            'summary': summary,
+            'decision': decision,
+            'reasons': reasons,
+            'specialist_note': 'Este resultado es una preevaluacion automatica; el visto bueno final debe considerar cultivo, marco de plantacion, disponibilidad real de agua, calidad de filtrado y plano constructivo.',
+            'recommendation': {
+                'priority': priority,
+                'type': 'Factibilidad',
+                'message': f'{label}. {summary}',
+                'action': decision
+            }
         }
 
     def _build_terrain_limits(self, dem_data, width, height, pixel_size_x, pixel_size_y, area_hectares):
